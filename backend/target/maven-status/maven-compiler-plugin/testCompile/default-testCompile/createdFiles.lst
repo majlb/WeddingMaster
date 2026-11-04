@@ -1,0 +1,6 @@
+com\wedora\WedoraApplicationTest.class
+com\wedora\service\AuthenticationServiceWeddingDateTest.class
+com\wedora\service\WeddingAssistantServiceTest.class
+com\wedora\service\ChecklistServiceTest.class
+com\wedora\domain\CountryCodesTest.class
+com\wedora\service\BookingServiceAvailabilityTest.class
