@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: ${DATABASE_URL}
-    username: ${DATABASE_USERNAME}
-    password: ${DATABASE_PASSWORD}
+    url: jdbc:postgresql://ep-long-sun-bbd4amz0-pooler.c-15.us-east-1.aws.neon.tech/wedmaster?sslmode=require&channel_binding=require
+    username: neondb_owner
+    password: npg_beAya4nDYm9S
   jpa:
     hibernate:
       ddl-auto: validate
