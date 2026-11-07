@@ -74,6 +74,10 @@ docker compose up --build -d
 
 The first startup downloads the configured model into the Ollama container before starting the API, which can take several minutes. The client is served at `http://localhost:8081`; it proxies `/api`, `/ws`, and `/uploads` to the API. Ollama and its downloaded models run locally in a separate container; no AI provider key is needed. PostgreSQL data, model files, and uploads persist in named volumes. The production API profile validates Flyway-managed schema instead of applying automatic Hibernate updates. Back up these volumes and use a TLS-terminating reverse proxy for public deployments.
 
+## Render frontend deployment
+
+For a Render Node web service, set the root directory to `frontend`, the build command to `npm install && npm run build`, and the start command to `npm start`. The start script serves the production Vite build on Render's `PORT`. Set `VITE_API_URL` to the deployed backend API URL ending in `/api`, `VITE_WS_URL` to its secure WebSocket URL ending in `/ws`, and configure the backend's `FRONTEND_URL` to the frontend's public origin. Alternatively, deploy the frontend as a Render Static Site with `npm install && npm run build` and `dist` as the publish directory.
+
 ## CI
 
 GitHub Actions runs Maven tests and the Vite production build on pushes and pull requests. The Dockerfiles can be used by a release pipeline to publish the backend and frontend images; configure registry credentials and deployment environments in repository secrets rather than source files.
