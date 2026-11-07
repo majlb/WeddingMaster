@@ -14,13 +14,17 @@ public record BookingResponse(
 ) {
     public static BookingResponse from(Booking booking) {
         String language = LocaleContextHolder.getLocale().getLanguage();
+        var category = booking.getServiceOffering() == null
+                ? (booking.getSupplier().getCategory() != null ? booking.getSupplier().getCategory()
+                : booking.getSupplier().getCategories().stream().findFirst().orElse(null))
+                : booking.getServiceOffering().getCategory();
         return new BookingResponse(booking.getId(), booking.getSupplier().getId(),
                 booking.getSupplier().getBusinessName(),
                 booking.getServiceOffering() == null ? null
                         : TranslationSupport.value(booking.getServiceOffering().getLocalizedContent(), language,
                         "name", booking.getServiceOffering().getName()),
                 booking.getCustomer().getName(),
-                booking.getSupplier().getCategory().getSlug(),
+                category == null ? null : category.getSlug(),
                 booking.getEventDate(), booking.getNotes(), booking.getStatus(),
                 booking.getQuotedAmountCents(), booking.getCurrency(), booking.getCreatedAt());
     }

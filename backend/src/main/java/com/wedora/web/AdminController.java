@@ -102,6 +102,9 @@ public class AdminController {
     @PatchMapping("/suppliers/{id}/approval")
     public SupplierResponse approveSupplier(@PathVariable Long id, @RequestParam boolean approved) {
         Supplier supplier = suppliers.findById(id).orElseThrow(() -> new ApiException.NotFound("Supplier not found"));
+        if (approved && supplier.getCategories().isEmpty()) {
+            throw new ApiException.Conflict("The supplier must select at least one work category before approval");
+        }
         supplier.setApproved(approved);
         if (approved) supplier.setActive(true);
         else if (!supplier.isApproved()) supplier.setActive(false);

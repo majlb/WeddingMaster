@@ -8,9 +8,10 @@ Except for registration/login, public supplier/category reads, health, and the S
 
 | Method | Route | Access | Purpose |
 |---|---|---|---|
-| POST | `/auth/register` | Public | Create customer; `{ "name", "email", "password", "countryCodes": ["FR", "GR"] }` |
-| POST | `/auth/register-supplier` | Public | Create supplier application; also requires `businessName`, `categorySlug`, `location`, `countryCodes`, and optional `description` |
-| POST | `/auth/login` | Public | Exchange email/password for `{ token, id, name, email, role, countryCodes }` |
+| POST | `/auth/register` | Public | Create customer; `{ "name", "username", "password", "countryCodes": ["FR", "GR"] }`; email is not collected and usernames are unique case-insensitively |
+| POST | `/auth/register-supplier` | Public | Create a supplier application using `username`, `businessName`, `location`, `countryCodes`, and optional `description`; email is not collected, usernames are unique case-insensitively, and categories are chosen later in the supplier dashboard |
+| GET | `/auth/username-availability?username=` | Public | Check whether a valid username is available |
+| POST | `/auth/login` | Public | Exchange `{ "username": "name", "password": "..." }` for an auth response including `token`, `id`, `name`, and `username`; legacy accounts may still sign in using their email as the username value |
 | PUT | `/users/me/countries` | Couple | Update the signed-in couple's country preferences |
 | PUT | `/users/me/wedding-date` | Couple | Save or clear the couple's wedding date using `{ "weddingDate": "YYYY-MM-DD" }` (or `null`) |
 | POST | `/assistant/chat` | Couple | Generate a wedding-planning reply using up to 12 alternating `{ "role": "user"|"assistant", "content": "..." }` messages; each message is limited to 1,200 characters |
@@ -19,6 +20,7 @@ Except for registration/login, public supplier/category reads, health, and the S
 | PUT | `/notifications/read-all` | Authenticated user | Mark all of the user's notifications as read |
 
 Passwords must be 10–72 characters and are stored using BCrypt. Tokens expire after the configured `JWT_EXPIRATION_MS` (default 24 hours).
+Usernames are 3–30 letters, numbers, periods, underscores, or hyphens. New accounts do not require or publish an email address; existing accounts retain email sign-in.
 The wedding date is included in authentication responses and is stored on the couple's account.
 
 ## Suppliers and categories
@@ -28,27 +30,47 @@ The wedding date is included in authentication responses and is stored on the co
 | GET | `/countries` | Public | ISO country codes and names for multi-country selectors |
 | GET | `/categories` | Public | Active categories |
 | GET | `/suppliers?category=&location=&maxPrice=&minRating=` | Public | Approved suppliers and filters |
-| GET | `/suppliers/{id}` | Public | Approved supplier details, including public map coordinates when set |
+| GET | `/suppliers/{id}` | Public | Approved supplier details, including public contact/social links and map coordinates when set |
 | GET | `/suppliers/me` | Supplier | List the signed-in supplier's profiles, including served country codes |
 | GET | `/suppliers/me/{id}/analytics` | Owning supplier | Profile visits, booking count, and message count |
-| PUT | `/suppliers/{id}` | Owning supplier | Edit business profile, services, availability, pricing, contact details, served country codes, and optional map coordinates (`latitude`, `longitude`) |
+| PUT | `/suppliers/{id}` | Owning supplier | Edit business profile, services, availability, pricing, served country codes, and optional map coordinates (`latitude`, `longitude`). Public contact fields are `contactEmail`, `contactPhone`, `whatsapp`, `website`, `facebook`, `instagram`, and `tiktok`; they are optional and separate from the required private account email. |
+| PUT | `/suppliers/{id}/categories` | Owning supplier | Replace work categories using `{ "categoryIds": [id, ...] }` |
 | GET | `/suppliers/{id}/reviews` | Public | Supplier reviews |
 | GET | `/suppliers/{id}/media` | Public | Approved supplier's image/video/PDF gallery |
 | POST | `/suppliers/{id}/media` | Owning supplier | Multipart image/video upload (`file`, optional `caption`); max 50 MB |
 | POST | `/suppliers/{id}/media/main-image` | Owning supplier | Multipart JPEG/PNG/WebP upload (`file`) used as the supplier's search-card image; max 50 MB |
 | GET | `/suppliers/{id}/services` | Public | Approved supplier's service offerings |
 | GET | `/suppliers/me/{id}/services` | Owning supplier | List the supplier's service offerings, including while awaiting approval |
-| POST | `/suppliers/{id}/services` | Owning supplier | Multipart service offering (`service` JSON part with `translations` for `en`, `fr`, `el`, and `ar`, optional `price`; optional `image`) |
-| PUT | `/suppliers/{id}/services/{serviceId}` | Owning supplier | Update all language translations and optionally replace its image |
+| POST | `/suppliers/{id}/services` | Owning supplier | Multipart service (`service` JSON part with `categoryId`, `translations` for `en`, `fr`, `el`, and `ar`, optional `price`; optional `image`) |
+| PUT | `/suppliers/{id}/services/{serviceId}` | Owning supplier | Update the category, all language translations, and optionally replace its image |
 | DELETE | `/suppliers/{id}/services/{serviceId}` | Owning supplier | Delete an offering that has no booking history |
 | GET | `/suppliers/{id}/services/{serviceId}/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | Public | List blocked and booked full-day dates for an approved supplier option (maximum 12-month range) |
 | GET | `/suppliers/me/{id}/services/{serviceId}/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | Owning supplier | List the supplier option's blocked and booked dates |
 | POST | `/suppliers/me/{id}/services/{serviceId}/availability` | Owning supplier | Block a date using `{ "date": "YYYY-MM-DD" }` |
 | DELETE | `/suppliers/me/{id}/services/{serviceId}/availability/{date}` | Owning supplier | Remove a manual date block; confirmed reservations cannot be removed |
 
-Supplier discovery accepts category slug, partial location, maximum starting price, and minimum rating. Suppliers choose a precise location by placing or dragging a pin on the map in their business profile; coordinates are stored as `latitude` and `longitude` and shown on the public supplier page. Map tiles are provided by OpenStreetMap. Each service offering is a general bookable supplier option with its own all-day date availability calendar.
+Supplier discovery accepts category slug, partial location, maximum starting price, and minimum rating. Suppliers choose one or more work categories in the dashboard, then assign each service to one selected category. Each service has its own all-day date availability calendar. Suppliers choose a precise location by placing or dragging a pin on the map in their business profile; coordinates are stored as `latitude` and `longitude` and shown on the public supplier page. Map tiles are provided by OpenStreetMap.
+An administrator can approve a supplier only after at least one work category has been selected.
 
 Category names/descriptions, supplier business-profile text, and individual service names/descriptions support English, French, Greek, and Arabic translations. API responses select the requested language from the `Accept-Language` header and fall back to the English value when a supplier translation is not available. Admin category create/update requests include a `translations` object keyed by language (`en`, `fr`, `el`, `ar`), each with translated `name` and `description`; supplier profile updates accept `localizedContent` keyed by language with `businessName`, `location`, `description`, `services`, and `availability`. Service create/update requests include a `translations` object with a `name` and optional `description` for each of the four languages. Couple-written booking notes, checklist labels, reviews, and chat messages remain in the language they were entered.
+
+## Supplier collaborations
+
+Suppliers can create collaborations with names translated into English, French, Greek, and Arabic, and invite one or more approved suppliers at creation. Invitees can accept or decline, and each accepted supplier can add their own existing service offerings. Only the creator can activate a collaboration, and activation requires every invited supplier to have accepted and added at least one service. Active collaborations appear to couples, who can select or unselect offers for their wedding.
+
+| Method | Route | Access | Purpose |
+|---|---|---|---|
+| POST | `/collaborations` | Supplier | Create with `{ "supplierId", "names": { "en", "fr", "el", "ar" }, "invitedSupplierIds": [id, ...], "serviceIds": [id, ...] }`; the creator's selected services are included immediately, the creator joins as accepted, and invitees are pending |
+| GET | `/collaborations` | Supplier | List collaborations and invitations for the signed-in supplier |
+| POST | `/collaborations/{id}/invitations` | Collaboration creator | Invite an additional approved supplier using `{ "supplierId" }` |
+| DELETE | `/collaborations/{id}/members/{supplierId}` | Collaboration creator | Remove a pending or declined invitation before activation |
+| POST | `/collaborations/{id}/response` | Invited supplier | Accept or decline using `{ "accepted": true|false }` |
+| POST | `/collaborations/{id}/items` | Accepted collaboration supplier | Add one of that supplier's existing offerings using `{ "serviceId" }` |
+| POST | `/collaborations/{id}/items/batch` | Accepted collaboration supplier | Add one or more of that supplier's existing services using `{ "serviceIds": [id, ...] }` |
+| POST | `/collaborations/{id}/activate` | Collaboration creator | Activate after all invited suppliers accepted and each added at least one service |
+| GET | `/collaborations/public` | Couple | List active offers and indicate which offers this couple selected |
+| POST | `/collaborations/{id}/select` | Couple | Select an active collaboration for the wedding |
+| DELETE | `/collaborations/{id}/select` | Couple | Remove the selection |
 
 Couple and supplier registration requests include one or more `countryCodes` values using ISO 3166-1 alpha-2 codes. Couples can update country preferences with `PUT /users/me/countries`; supplier profiles can update the countries they serve with `PUT /suppliers/{id}`. Couple discovery and saved suppliers show only suppliers serving at least one selected country.
 
@@ -80,7 +102,7 @@ Never mark an invoice paid based on client-side state. Payment status is driven 
 
 The local Vite server proxies `/ws` to the API with WebSocket upgrades enabled. If chat does not connect, confirm the API is running on port 8080, the frontend is opened from `localhost:5173` or `127.0.0.1:5173`, and the account has an active booking with that supplier.
 
-Authenticated customers and suppliers can subscribe to `/user/queue/notifications` for real-time updates. Booking requests, offers, booking status changes, and incoming chat messages create persistent in-app notifications for the recipient; the notification center shows unread counts and remains available after reconnecting.
+Authenticated customers and suppliers can subscribe to `/user/queue/notifications` for real-time updates. Booking requests, offers, booking status changes, incoming chat messages, and collaboration invitations/acceptances/service additions/activation/selections create persistent in-app notifications for the affected user; the notification center shows unread counts and remains available after reconnecting. Notification responses contain either a `bookingId` or a `collaborationId`, depending on the event.
 
 Connect STOMP to `/ws`, send the JWT in the STOMP `CONNECT` native `Authorization: Bearer <JWT>` header, and subscribe to `/topic/bookings/{bookingId}`. Send messages to `/app/bookings/{bookingId}` with `{ "body": "…", "attachmentId": 123 }`. Upload a private attachment to `POST /bookings/{id}/attachments` as multipart `file`, then include its returned `id`; download links are participant-protected. JPEG, PNG, WebP, MP4, and PDF files are accepted up to 50 MB. Both chat history (`GET /bookings/{id}/messages`) and WebSocket subscriptions/sends verify that the signed-in account is a participant in that booking.
 

@@ -47,13 +47,13 @@ public class BookingService {
         SupplierServiceOffering offering = null;
         if (request.serviceOfferingId() != null) {
             offering = offerings.findByIdForUpdate(request.serviceOfferingId())
-                    .orElseThrow(() -> new ApiException.NotFound("Supplier option not found"));
+                    .orElseThrow(() -> new ApiException.NotFound("Supplier service not found"));
             if (!offering.getSupplier().getId().equals(supplier.getId())) {
-                throw new ApiException.NotFound("Supplier option not found");
+                throw new ApiException.NotFound("Supplier service not found");
             }
             if (availabilityBlocks.existsByServiceOfferingIdAndBlockedDate(
                     offering.getId(), request.eventDate())) {
-                throw new ApiException.Conflict("This option is not available on the selected date");
+                throw new ApiException.Conflict("This service is not available on the selected date");
             }
         }
         Booking booking = new Booking();
@@ -65,14 +65,21 @@ public class BookingService {
         booking.setCurrency(supplier.getCurrency());
         booking = bookings.save(booking);
 
+        var checklistCategory = offering == null ? supplier.getCategory() : offering.getCategory();
+        if (checklistCategory == null) {
+            checklistCategory = supplier.getCategories().stream().findFirst()
+                    .orElseThrow(() -> new ApiException(org.springframework.http.HttpStatus.CONFLICT,
+                            "Supplier has not selected a service category"));
+        }
+        var selectedCategory = checklistCategory;
         ChecklistItem item = checklist.findByCustomerIdOrderByCreatedAtAsc(customer.getId()).stream()
                 .filter(candidate -> !candidate.isCompleted() && candidate.getBooking() == null
-                        && supplier.getCategory().getSlug().equals(candidate.getCategorySlug()))
+                        && selectedCategory.getSlug().equals(candidate.getCategorySlug()))
                 .findFirst().orElseGet(() -> {
                     ChecklistItem customItem = new ChecklistItem();
                     customItem.setCustomer(customer);
-                    customItem.setTitle("Book " + supplier.getCategory().getName().toLowerCase(Locale.ROOT));
-                    customItem.setCategorySlug(supplier.getCategory().getSlug());
+                    customItem.setTitle("Book " + selectedCategory.getName().toLowerCase(Locale.ROOT));
+                    customItem.setCategorySlug(selectedCategory.getSlug());
                     return customItem;
                 });
         item.setBooking(booking);
@@ -123,10 +130,10 @@ public class BookingService {
         }
         if (booking.getServiceOffering() != null) {
             SupplierServiceOffering offering = offerings.findByIdForUpdate(booking.getServiceOffering().getId())
-                    .orElseThrow(() -> new ApiException.Conflict("This supplier option is no longer available"));
+                    .orElseThrow(() -> new ApiException.Conflict("This supplier service is no longer available"));
             if (availabilityBlocks.existsByServiceOfferingIdAndBlockedDate(
                     offering.getId(), booking.getEventDate())) {
-                throw new ApiException.Conflict("This option has already been booked or blocked for that date");
+                throw new ApiException.Conflict("This service has already been booked or blocked for that date");
             }
             SupplierAvailabilityBlock reservation = new SupplierAvailabilityBlock();
             reservation.setServiceOffering(offering);
@@ -153,13 +160,13 @@ public class BookingService {
         }
         if (booking.getServiceOffering() != null) {
             SupplierServiceOffering offering = offerings.findByIdForUpdate(booking.getServiceOffering().getId())
-                    .orElseThrow(() -> new ApiException.Conflict("This supplier option is no longer available"));
+                    .orElseThrow(() -> new ApiException.Conflict("This supplier service is no longer available"));
             var reservation = availabilityBlocks.findByServiceOfferingIdAndBlockedDate(
                     offering.getId(), booking.getEventDate());
             if (reservation.isPresent()) {
                 if (reservation.get().getBooking() == null
                         || !reservation.get().getBooking().getId().equals(booking.getId())) {
-                    throw new ApiException.Conflict("This option has already been booked or blocked for that date");
+                    throw new ApiException.Conflict("This service has already been booked or blocked for that date");
                 }
             } else {
                 SupplierAvailabilityBlock newReservation = new SupplierAvailabilityBlock();
@@ -187,7 +194,7 @@ public class BookingService {
         }
         if (booking.getServiceOffering() != null) {
             offerings.findByIdForUpdate(booking.getServiceOffering().getId())
-                    .orElseThrow(() -> new ApiException.Conflict("This supplier option is no longer available"));
+                    .orElseThrow(() -> new ApiException.Conflict("This supplier service is no longer available"));
             availabilityBlocks.findByServiceOfferingIdAndBlockedDate(
                     booking.getServiceOffering().getId(), booking.getEventDate())
                     .filter(block -> block.getBooking() != null

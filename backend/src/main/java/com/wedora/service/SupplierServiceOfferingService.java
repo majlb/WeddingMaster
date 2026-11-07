@@ -2,6 +2,7 @@ package com.wedora.service;
 
 import com.wedora.domain.Supplier;
 import com.wedora.domain.SupplierAvailabilityBlock;
+import com.wedora.domain.Category;
 import com.wedora.domain.SupplierServiceOffering;
 import com.wedora.repository.BookingRepository;
 import com.wedora.repository.SupplierAvailabilityBlockRepository;
@@ -82,7 +83,7 @@ public class SupplierServiceOfferingService {
             throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Past dates cannot be blocked");
         }
         if (availabilityBlocks.existsByServiceOfferingIdAndBlockedDate(serviceId, date)) {
-            throw new ApiException.Conflict("This date is already blocked or booked for the selected option");
+            throw new ApiException.Conflict("This date is already blocked or booked for the selected service");
         }
         SupplierAvailabilityBlock block = new SupplierAvailabilityBlock();
         block.setServiceOffering(offering);
@@ -110,6 +111,7 @@ public class SupplierServiceOfferingService {
         validate(request);
         SupplierServiceOffering offering = new SupplierServiceOffering();
         offering.setSupplier(supplier);
+        offering.setCategory(requireAssignedCategory(supplier, request.categoryId()));
         applyRequest(offering, request);
         if (image != null && !image.isEmpty()) {
             offering.setImageUrl(mediaService.storeServiceImage(supplierId, email, image));
@@ -124,6 +126,7 @@ public class SupplierServiceOfferingService {
         SupplierServiceOffering offering = services.findByIdAndSupplierId(serviceId, supplierId)
                 .orElseThrow(() -> new ApiException.NotFound("Service not found"));
         validate(request);
+        offering.setCategory(requireAssignedCategory(supplier, request.categoryId()));
         applyRequest(offering, request);
         if (image != null && !image.isEmpty()) {
             offering.setImageUrl(mediaService.storeServiceImage(supplierId, email, image));
@@ -137,7 +140,7 @@ public class SupplierServiceOfferingService {
         SupplierServiceOffering offering = services.findByIdAndSupplierId(serviceId, supplierId)
                 .orElseThrow(() -> new ApiException.NotFound("Service not found"));
         if (bookings.existsByServiceOfferingId(serviceId)) {
-            throw new ApiException.Conflict("This option cannot be deleted because it has booking history");
+            throw new ApiException.Conflict("This service cannot be deleted because it has booking history");
         }
         availabilityBlocks.deleteByServiceOfferingId(serviceId);
         services.delete(offering);
@@ -158,24 +161,25 @@ public class SupplierServiceOfferingService {
 
     private SupplierServiceOffering requireOffering(Long supplierId, Long serviceId) {
         return services.findByIdAndSupplierId(serviceId, supplierId)
-                .orElseThrow(() -> new ApiException.NotFound("Supplier option not found"));
+                .orElseThrow(() -> new ApiException.NotFound("Supplier service not found"));
     }
 
     private SupplierServiceOffering lockedOffering(Long supplierId, Long serviceId) {
         SupplierServiceOffering offering = services.findByIdForUpdate(serviceId)
-                .orElseThrow(() -> new ApiException.NotFound("Supplier option not found"));
+                .orElseThrow(() -> new ApiException.NotFound("Supplier service not found"));
         if (!offering.getSupplier().getId().equals(supplierId)) {
-            throw new ApiException.NotFound("Supplier option not found");
+            throw new ApiException.NotFound("Supplier service not found");
         }
         return offering;
     }
 
     private void validate(SupplierServiceRequest request) {
-        if (request == null || request.translations() == null
+        if (request == null || request.categoryId() == null || request.translations() == null
                 || request.translations().size() != SUPPORTED_LANGUAGES.size()
                 || !request.translations().keySet().containsAll(SUPPORTED_LANGUAGES)) {
             throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Provide service translations in English, French, Greek, and Arabic");
         }
+
         for (String language : SUPPORTED_LANGUAGES) {
             SupplierServiceTranslationRequest translation = request.translations().get(language);
             if (translation == null || translation.name() == null || translation.name().isBlank()) {
@@ -191,6 +195,14 @@ public class SupplierServiceOfferingService {
         if (request.price() != null && request.price().signum() < 0) {
             throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Service price cannot be negative");
         }
+    }
+
+    private Category requireAssignedCategory(Supplier supplier, Long categoryId) {
+        return supplier.getCategories().stream()
+                .filter(category -> category.getId().equals(categoryId) && category.isActive())
+                .findFirst()
+                .orElseThrow(() -> new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                        "Choose a category assigned to your supplier profile"));
     }
 
     private void applyRequest(SupplierServiceOffering offering, SupplierServiceRequest request) {

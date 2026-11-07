@@ -47,7 +47,7 @@ public class EmailNotificationService {
     }
 
     private void sendAfterCommit(String recipient, String subject, String body) {
-        if (!enabled) return;
+        if (!enabled || recipient.endsWith("@account.wedmaster.invalid")) return;
         Runnable delivery = () -> {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(sender);

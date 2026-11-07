@@ -27,8 +27,14 @@ public class Supplier {
     private Long id;
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     private AppUser owner;
-    @ManyToOne(optional = false, fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.EAGER)
     private Category category;
+    @ManyToMany
+    @JoinTable(name = "supplier_category_assignments",
+            joinColumns = @JoinColumn(name = "supplier_id"),
+            inverseJoinColumns = @JoinColumn(name = "category_id"))
+    @OrderColumn(name = "display_order")
+    private List<Category> categories = new ArrayList<>();
     @Column(nullable = false, length = 150)
     private String businessName;
     @Column(nullable = false, length = 140)
@@ -52,10 +58,20 @@ public class Supplier {
     private BigDecimal startingPrice;
     @Column(length = 3)
     private String currency = "EUR";
+    @Column(name = "contact_email", length = 180)
+    private String contactEmail;
     @Column(length = 30)
     private String contactPhone;
+    @Column(length = 30)
+    private String whatsapp;
     @Column(length = 180)
     private String website;
+    @Column(length = 500)
+    private String facebook;
+    @Column(length = 500)
+    private String instagram;
+    @Column(length = 500)
+    private String tiktok;
     @Column(name = "main_image_url", length = 500)
     private String mainImageUrl;
     @JdbcTypeCode(SqlTypes.JSON)

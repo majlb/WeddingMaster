@@ -21,8 +21,10 @@ public class UserNotification {
     private Long id;
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     private AppUser recipient;
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     private Booking booking;
+    @Column(name = "collaboration_id")
+    private Long collaborationId;
     @Column(nullable = false, length = 40)
     private String type;
     @Column(nullable = false, length = 120)

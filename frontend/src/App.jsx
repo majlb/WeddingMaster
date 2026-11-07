@@ -9,7 +9,7 @@ import {
   Trash2, Users, Utensils, X,
 } from "lucide-react";
 import {
-  adminApi, assistantApi, authApi, bookingsApi, categoriesApi, checklistApi, countriesApi, messagesApi,
+  adminApi, assistantApi, authApi, bookingsApi, categoriesApi, checklistApi, collaborationsApi, countriesApi, messagesApi,
   notificationsApi, supplierServicesApi, usersApi,
   paymentsApi, resolveMediaUrl, reviewsApi, suppliersApi, websocketUrl,
 } from "./api.js";
@@ -60,11 +60,12 @@ const customerNavigation = [
   { id: "bookings", icon: CalendarDays },
   { id: "messages", icon: MessageCircle },
   { id: "saved", icon: Heart },
+  { id: "collaborations", icon: Users },
 ];
 
 const workspacePages = {
-  CUSTOMER: ["home", "discover", "checklist", "bookings", "messages", "saved"],
-  SUPPLIER: ["supplierDashboard", "discover", "bookings", "messages"],
+  CUSTOMER: ["home", "discover", "checklist", "bookings", "messages", "saved", "collaborations"],
+  SUPPLIER: ["supplierDashboard", "discover", "bookings", "messages", "collaborations"],
   ADMIN: ["admin"],
 };
 
@@ -181,6 +182,8 @@ function App() {
     try { return JSON.parse(localStorage.getItem("wedora-user") || "null"); }
     catch { return null; }
   });
+  const [supplierCollaborationEligible, setSupplierCollaborationEligible] = useState(false);
+  const [supplierCollaborationAccessChecked, setSupplierCollaborationAccessChecked] = useState(false);
   const isPublicLanding = isLandingPath && !account;
   const activePage = supplierRoute
     ? (location.state?.returnPage || "discover")
@@ -194,6 +197,7 @@ function App() {
   const [query, setQuery] = useState("");
   const [saved, setSaved] = useState(() => account ? readSavedSuppliers(account.id) : []);
   const [tasks, setTasks] = useState([]);
+  const [selectedCollaborations, setSelectedCollaborations] = useState([]);
   const [appearance, setAppearance] = useState(readAppearance);
   const { palette, typography, density, darkMode } = appearance;
   const [language, setLanguage] = useState(i18n.language);
@@ -233,12 +237,35 @@ function App() {
   useEffect(() => {
     setSaved(account?.role === "CUSTOMER" ? readSavedSuppliers(account.id) : []);
     setTasks([]);
+    setSelectedCollaborations([]);
     setApiBookings(null);
     setBookingsLoadError(false);
     setChecklistLoaded(false);
     setChecklistLoadError(false);
     setPaymentRecords([]);
   }, [account]);
+  useEffect(() => {
+    let active = true;
+    if (account?.role !== "SUPPLIER") {
+      setSupplierCollaborationEligible(false);
+      setSupplierCollaborationAccessChecked(true);
+      return () => { active = false; };
+    }
+    setSupplierCollaborationEligible(false);
+    setSupplierCollaborationAccessChecked(false);
+    suppliersApi.owned().then(({ data }) => {
+      if (active) {
+        setSupplierCollaborationEligible(data.some((profile) => profile.approved && profile.active !== false));
+        setSupplierCollaborationAccessChecked(true);
+      }
+    }).catch((error) => {
+      if (active) {
+        setSupplierCollaborationAccessChecked(true);
+        setNotice(error.response?.data?.detail || t("errorLoadBusinessProfile"));
+      }
+    });
+    return () => { active = false; };
+  }, [account?.id, account?.role, t]);
   useEffect(() => {
     localStorage.setItem("wedora-appearance", JSON.stringify(appearance));
   }, [appearance]);
@@ -252,9 +279,15 @@ function App() {
       if (activePage !== "discover") navigate("/");
       return;
     }
+    if (account.role === "SUPPLIER" && activePage === "collaborations"
+        && !supplierCollaborationAccessChecked) return;
     const rolePages = workspacePages[account.role] || [];
-    if (!rolePages.includes(activePage)) navigate(workspacePathFor(account));
-  }, [activePage, account, isLandingPath, isPublicLanding, navigate, supplierRoute]);
+    if (!rolePages.includes(activePage)
+        || (account.role === "SUPPLIER" && activePage === "collaborations" && !supplierCollaborationEligible)) {
+      navigate(workspacePathFor(account));
+    }
+  }, [activePage, account, isLandingPath, isPublicLanding, navigate, supplierRoute,
+    supplierCollaborationAccessChecked, supplierCollaborationEligible]);
   useEffect(() => {
     suppliersApi.list().then(({ data }) => {
       if (data.length) {
@@ -262,7 +295,7 @@ function App() {
           ...supplier,
           name: supplier.businessName,
           place: supplier.location,
-          category: supplier.categoryName,
+          category: supplier.categories?.map((category) => category.name).filter(Boolean).join(", ") || supplier.categoryName,
           rating: Number(supplier.rating || 0).toFixed(2),
           reviews: supplier.reviewCount || 0,
           price: supplier.startingPrice ? `${supplier.currency} ${supplier.startingPrice}` : t("askForQuote"),
@@ -320,7 +353,7 @@ function App() {
           ...data,
           name: data.businessName,
           place: data.location,
-          category: data.categoryName,
+          category: data.categories?.map((category) => category.name).filter(Boolean).join(", ") || data.categoryName,
           rating: Number(data.rating || 0).toFixed(2),
           reviews: data.reviewCount || 0,
           price: data.startingPrice ? `${data.currency} ${data.startingPrice}` : t("askForQuote"),
@@ -335,7 +368,7 @@ function App() {
         ...data,
         name: data.businessName,
         place: data.location,
-        category: data.categoryName,
+        category: data.categories?.map((category) => category.name).filter(Boolean).join(", ") || data.categoryName,
         rating: Number(data.rating || 0).toFixed(2),
         reviews: data.reviewCount || 0,
         price: data.startingPrice ? `${data.currency} ${data.startingPrice}` : t("askForQuote"),
@@ -393,6 +426,11 @@ function App() {
         setChecklistLoadError(true);
         setChecklistLoaded(true);
         setNotice(error.response?.data?.detail || t("errorLoadChecklist"));
+      });
+      collaborationsApi.listPublic().then(({ data }) => {
+        if (active) setSelectedCollaborations(data.filter((collaboration) => collaboration.selected));
+      }).catch((error) => {
+        if (active) setNotice(error.response?.data?.detail || t("errorLoadCollaborations"));
       });
       paymentsApi.history().then(({ data }) => {
         if (active) setPaymentRecords(data);
@@ -481,14 +519,62 @@ function App() {
   }, [account, catalog]);
 
   const filteredSuppliers = useMemo(() => countryCatalog.filter((supplier) => {
-    const matchesCategory = selectedCategory === "All" || supplier.category === selectedCategory;
+    const matchesCategory = selectedCategory === "All" || supplier.category === selectedCategory
+      || supplier.categories?.some((category) => category.name === selectedCategory);
     const matchesSaved = activePage !== "saved" || saved.includes(supplier.id);
     const matchesQuery = `${supplier.name} ${supplier.category} ${supplier.place}`.toLowerCase().includes(query.toLowerCase());
     return matchesCategory && matchesSaved && matchesQuery;
   }), [activePage, countryCatalog, query, saved, selectedCategory]);
 
-  const completedTasks = tasks.filter((task) => task.done).length;
-  const progress = Math.round((completedTasks / Math.max(tasks.length, 1)) * 100);
+  const checklistTasks = useMemo(() => {
+    const servicesByCategory = new Map();
+    selectedCollaborations.forEach((collaboration) => {
+      (collaboration.items || []).forEach((item) => {
+        if (!item.categorySlug) return;
+        const categorySlug = item.categorySlug.toLowerCase();
+        const services = servicesByCategory.get(categorySlug) || [];
+        if (!services.some((service) => service.collaborationId === collaboration.id && service.serviceId === item.serviceId)) {
+          services.push({
+            collaborationId: collaboration.id,
+            serviceId: item.serviceId,
+            collaborationName: collaboration.name,
+            serviceName: item.serviceName,
+            categoryName: item.categoryName,
+          });
+        }
+        servicesByCategory.set(categorySlug, services);
+      });
+    });
+    const matchedCategories = new Set();
+    const withCollaborations = tasks.map((task) => {
+      const categorySlug = task.category?.toLowerCase();
+      const collaborationSources = servicesByCategory.get(categorySlug) || [];
+      if (collaborationSources.length) matchedCategories.add(categorySlug);
+      return {
+        ...task,
+        done: task.done || collaborationSources.length > 0,
+        collaborationSources,
+      };
+    });
+    servicesByCategory.forEach((collaborationSources, categorySlug) => {
+      if (matchedCategories.has(categorySlug)) return;
+      const category = directoryCategories.find((item) => item.slug === categorySlug);
+      withCollaborations.push({
+        id: `collaboration-category-${categorySlug}`,
+        title: category?.name || collaborationSources[0]?.categoryName || categorySlug,
+        due: t("wheneverReady"),
+        category: categorySlug,
+        done: true,
+        budgetAmount: null,
+        collaborationSources,
+        derivedFromCollaboration: true,
+      });
+    });
+    return withCollaborations;
+  }, [tasks, selectedCollaborations, directoryCategories, t]);
+
+  const completedTasks = checklistTasks.filter((task) => task.done).length;
+  const progress = Math.round((completedTasks / Math.max(checklistTasks.length, 1)) * 100);
 
   function toggleSaved(id) {
     if (account?.role !== "CUSTOMER") {
@@ -674,6 +760,10 @@ function App() {
         return;
       }
     }
+    if (notification.collaborationId) {
+      setActivePage("collaborations");
+      return;
+    }
     try {
       const { data } = await bookingsApi.list();
       setApiBookings(data);
@@ -698,6 +788,7 @@ function App() {
     : account?.role === "SUPPLIER"
       ? [
         { id: "supplierDashboard", icon: BriefcaseBusiness },
+        ...(supplierCollaborationEligible ? [{ id: "collaborations", icon: Users }] : []),
         { id: "bookings", icon: CalendarDays },
         { id: "messages", icon: MessageCircle },
         { id: "discover", icon: Search },
@@ -710,7 +801,8 @@ function App() {
     : activePage === "supplierDashboard" ? t("businessDashboard")
       : activePage === "admin" ? t("admin") : t(activePage);
   const hasPageAccess = account
-    ? Boolean(workspacePages[account.role]?.includes(activePage))
+    ? Boolean(workspacePages[account.role]?.includes(activePage)
+      && !(account.role === "SUPPLIER" && activePage === "collaborations" && !supplierCollaborationEligible))
     : activePage === "discover";
 
   return (
@@ -806,7 +898,7 @@ function App() {
                     <span className="notification-item-icon"><Bell size={15} /></span>
                     <span className="notification-item-copy">
                       <strong>{t(`notification_${item.type}`, { actorName: item.actorName })}</strong>
-                      <small>{item.eventDate} · {new Date(item.createdAt).toLocaleString(language)}</small>
+                      <small>{item.eventDate ? `${item.eventDate} · ` : ""}{new Date(item.createdAt).toLocaleString(language)}</small>
                     </span>
                     {!item.read && <i aria-label={t("unreadNotification")} />}
                   </button>)}
@@ -838,7 +930,7 @@ function App() {
           {activePage === "home" && !isPublicLanding && account?.role === "CUSTOMER" && (
             <CoupleDashboard
               account={account}
-              tasks={tasks}
+              tasks={checklistTasks}
               suppliers={countryCatalog}
               directoryLoaded={directoryLoaded}
               directoryError={directoryError}
@@ -858,7 +950,7 @@ function App() {
             />
           )}
 
-          {activePage !== "home" && hasPageAccess && <div className="page-title-row"><div><div className="eyebrow">{account?.role === "CUSTOMER" ? t("weddingYourWay") : roleLabel ? roleLabel.toUpperCase() : t("weddingProfessionals")}</div><h1>{pageTitle}</h1><p>{activePage === "checklist" ? t("checklistIntro") : activePage === "discover" ? t("discoverIntro") : t("pageIntro")}</p></div>
+          {activePage !== "home" && hasPageAccess && <div className="page-title-row"><div><div className="eyebrow">{account?.role === "CUSTOMER" ? t("weddingYourWay") : roleLabel ? roleLabel.toUpperCase() : t("weddingProfessionals")}</div><h1>{pageTitle}</h1><p>{activePage === "checklist" ? t("checklistIntro") : activePage === "discover" ? t("discoverIntro") : activePage === "collaborations" ? t("collaborationsIntro") : t("pageIntro")}</p></div>
             {activePage === "checklist" && <button className="primary-button" onClick={() => { setChecklistEditingTask(null); setChecklistModalOpen(true); }}><span>+</span> {t("addTask")}</button>}
             {activePage === "discover" && <button className="secondary-button" onClick={() => setNotice(t("showingAllSuppliers"))}><SlidersHorizontal size={16} /> {t("filters")} <span className="filter-dot" /></button>}
           </div>}
@@ -876,7 +968,7 @@ function App() {
               ? <EmptyState title={t("checklistLoadFailedTitle")} detail={t("tryAgainShortly")} action={() => window.location.reload()} actionLabel={t("reloadChecklist")} />
               : !checklistLoaded
                 ? <p className="workspace-loading">{t("loadingChecklist")}</p>
-                : <div className="checklist-layout"><ChecklistCard tasks={tasks} categories={directoryCategories} progress={progress} currencyCode={account.currencyCode || "USD"} onToggle={toggleTask} onEdit={(task) => { setChecklistEditingTask(task); setChecklistModalOpen(true); }} onRemove={removeChecklistTask} expanded /><aside className="side-tip"><span className="tip-icon"><Sparkles size={18} /></span><h3>{t("oneStepAtTime")}</h3><p>{t("checklistTip")}</p><div className="tip-count">{t("tasksDone", { completed: completedTasks, total: tasks.length })} <span>{progress}%</span></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></aside></div>
+                : <div className="checklist-layout"><ChecklistCard tasks={checklistTasks} categories={directoryCategories} progress={progress} currencyCode={account.currencyCode || "USD"} onToggle={toggleTask} onEdit={(task) => { setChecklistEditingTask(task); setChecklistModalOpen(true); }} onRemove={removeChecklistTask} expanded /><aside className="side-tip"><span className="tip-icon"><Sparkles size={18} /></span><h3>{t("oneStepAtTime")}</h3><p>{t("checklistTip")}</p><div className="tip-count">{t("tasksDone", { completed: completedTasks, total: checklistTasks.length })} <span>{progress}%</span></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></aside></div>
           )}
 
           {activePage === "bookings" && (account?.role === "CUSTOMER" || account?.role === "SUPPLIER") && <div className="bookings-panel"><div className="panel-heading"><div><h2>{account.role === "SUPPLIER" ? t("bookingEnquiries") : t("yourSupplierRequests")}</h2><p>{account.role === "SUPPLIER" ? t("manageBookingRequests") : t("bookingConversationSummary")}</p></div><CalendarDays size={20} /></div>
@@ -900,14 +992,15 @@ function App() {
           {activePage === "messages" && (account?.role === "CUSTOMER" || account?.role === "SUPPLIER") && account && apiBookings?.length > 0
             ? <ChatInbox bookings={apiBookings} user={account} initialBookingId={focusedMessageBookingId} onNotice={setNotice} />
             : activePage === "messages" && (account?.role === "CUSTOMER" || account?.role === "SUPPLIER") && <div className="messages-empty"><div className="messages-illustration"><MessageCircle size={38} /><span>✿</span></div><div className="eyebrow">{t("yourWorkspace").toUpperCase()}</div><h2>{t("messagesEmptyTitle")}</h2><p>{account.role === "SUPPLIER" ? t("supplierMessagesEmpty") : t("customerMessagesEmpty")}</p><button className="primary-button" onClick={() => setActivePage(account.role === "SUPPLIER" ? "bookings" : "discover")}>{account.role === "SUPPLIER" ? t("viewBookingEnquiries") : t("meetSuppliers")} <ArrowRight size={15} /></button></div>}
-          {activePage === "supplierDashboard" && account?.role === "SUPPLIER" && <SupplierDashboard countryOptions={countryOptions} onNotice={setNotice} />}
+          {activePage === "collaborations" && account && (account.role === "CUSTOMER" || (account.role === "SUPPLIER" && supplierCollaborationEligible)) && <CollaborationsWorkspace role={account.role} onNotice={setNotice} onSelectedCollaborations={setSelectedCollaborations} />}
+          {activePage === "supplierDashboard" && account?.role === "SUPPLIER" && <SupplierDashboard countryOptions={countryOptions} categories={directoryCategories} onNotice={setNotice} />}
           {activePage === "admin" && account?.role === "ADMIN" && <AdminDashboard onNotice={setNotice} />}
         </div>
       </main>
 
       {selectedSupplier && <SupplierModal supplier={selectedSupplier} countryOptions={countryOptions} saved={saved.includes(selectedSupplier.id)} canContact={account?.role === "CUSTOMER"} onSave={toggleSaved} onClose={closeSupplier} onBook={(offering = null, options = []) => setBookingSupplier({ supplier: selectedSupplier, offering, options })} onMessage={() => { setNotice(t("supplierConversationReady", { name: selectedSupplier.name })); closeSupplier(); setActivePage("messages"); }} />}
       {bookingSupplier && <BookingModal supplier={bookingSupplier.supplier} serviceOffering={bookingSupplier.offering} options={bookingSupplier.options} onClose={() => setBookingSupplier(null)} onSubmit={(details) => bookSupplier(bookingSupplier.supplier, details)} />}
-      {authOpen && <AuthModal key={authMode} initialMode={authMode} account={account} categories={directoryCategories} countryOptions={countryOptions} onClose={() => setAuthOpen(false)} onSignedIn={(user) => {
+      {authOpen && <AuthModal key={authMode} initialMode={authMode} account={account} countryOptions={countryOptions} onClose={() => setAuthOpen(false)} onSignedIn={(user) => {
         localStorage.setItem("wedora-token", user.token);
         localStorage.setItem("wedora-user", JSON.stringify(user));
         setSaved(user.role === "CUSTOMER" ? readSavedSuppliers(user.id) : []);
@@ -1227,9 +1320,13 @@ function localizedCountryName(code, language, options = []) {
   }
 }
 
-function CountryMultiSelect({ label, countryOptions = [], value = [], onChange }) {
+function CountryMultiSelect({ label, countryOptions = [], value = [], onChange, initiallyOpen = false }) {
   const { t, i18n } = useTranslation();
   const [search, setSearch] = useState("");
+  const detailsRef = useRef(null);
+  useEffect(() => {
+    if (initiallyOpen && detailsRef.current) detailsRef.current.open = true;
+  }, [initiallyOpen]);
   const filteredOptions = countryOptions.filter((country) =>
     localizedCountryName(country.code, i18n.language, countryOptions).toLocaleLowerCase(i18n.language)
       .includes(search.toLocaleLowerCase(i18n.language)));
@@ -1240,7 +1337,7 @@ function CountryMultiSelect({ label, countryOptions = [], value = [], onChange }
   }
   return <div className="country-multi-select">
     <span className="country-select-label">{label}</span>
-    <details className="country-select-details">
+    <details ref={detailsRef} className="country-select-details">
       <summary>{value.length ? t("selectedCountriesCount", { count: value.length }) : t("chooseCountries")}</summary>
       <div className="country-options-panel">
         <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("searchCountries")} aria-label={t("searchCountries")} />
@@ -1495,7 +1592,331 @@ function WeddingAssistant() {
   </div>;
 }
 
-function SupplierDashboard({ countryOptions, onNotice }) {
+function CollaborationsWorkspace({ role, onNotice, onSelectedCollaborations }) {
+  const { t } = useTranslation();
+  const translationLanguages = [
+    { code: "en", label: "English" },
+    { code: "fr", label: "French" },
+    { code: "el", label: "Greek" },
+    { code: "ar", label: "Arabic" },
+  ];
+  const [collaborations, setCollaborations] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [directory, setDirectory] = useState([]);
+  const [services, setServices] = useState([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [creatorServiceIds, setCreatorServiceIds] = useState([]);
+  const [selectedServices, setSelectedServices] = useState({});
+  const [inviteSuppliers, setInviteSuppliers] = useState({});
+  const [nameTranslations, setNameTranslations] = useState({ en: "", fr: "", el: "", ar: "" });
+  const [selectedInviteIds, setSelectedInviteIds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  async function loadCollaborations() {
+    try {
+      const { data } = await (role === "CUSTOMER" ? collaborationsApi.listPublic() : collaborationsApi.list());
+      setCollaborations(data);
+      if (role === "CUSTOMER") onSelectedCollaborations(data.filter((collaboration) => collaboration.selected));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorLoadCollaborations"));
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    if (role === "CUSTOMER") {
+      collaborationsApi.listPublic().then(({ data }) => {
+        if (active) {
+          setCollaborations(data);
+          onSelectedCollaborations(data.filter((collaboration) => collaboration.selected));
+        }
+      }).catch((error) => {
+        if (active) onNotice(error.response?.data?.detail || t("errorLoadCollaborations"));
+      }).finally(() => {
+        if (active) setLoading(false);
+      });
+      return () => { active = false; };
+    }
+    Promise.allSettled([collaborationsApi.list(), suppliersApi.owned(), suppliersApi.list()]).then((results) => {
+      if (!active) return;
+      const [collaborationResult, profileResult, directoryResult] = results;
+      if (collaborationResult.status === "fulfilled") setCollaborations(collaborationResult.value.data);
+      else onNotice(collaborationResult.reason.response?.data?.detail || t("errorLoadCollaborations"));
+      if (profileResult.status === "fulfilled") {
+        const availableProfiles = profileResult.value.data.filter((profile) =>
+          profile.approved && profile.active !== false);
+        setProfiles(profileResult.value.data);
+        setServicesLoading(true);
+        Promise.all(availableProfiles.map(async (profile) => {
+          const { data } = await supplierServicesApi.listOwned(profile.id);
+          return data.map((service) => ({
+            ...service,
+            supplierId: profile.id,
+            supplierName: profile.businessName,
+          }));
+        })).then((serviceGroups) => {
+          if (active) setServices(serviceGroups.flat());
+        }).catch((error) => {
+          if (active) onNotice(error.response?.data?.detail || t("errorLoadServices"));
+        }).finally(() => {
+          if (active) setServicesLoading(false);
+        });
+      } else {
+        setServicesLoading(false);
+        onNotice(profileResult.reason.response?.data?.detail || t("errorLoadBusinessProfile"));
+      }
+      if (directoryResult.status === "fulfilled") setDirectory(directoryResult.value.data);
+      else onNotice(directoryResult.reason.response?.data?.detail || t("directoryOffline"));
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [role, onNotice, onSelectedCollaborations, t]);
+
+  const profileIds = profiles.map((profile) => profile.id);
+  const eligibleProfiles = profiles.filter((profile) => profile.approved && profile.active !== false);
+  const inviteCandidates = directory.filter((supplier) => !profileIds.includes(supplier.id));
+  const creatorSupplierId = services.find((service) => creatorServiceIds.includes(service.id))?.supplierId;
+
+  async function createCollaboration(event) {
+    event.preventDefault();
+    if (!creatorSupplierId || translationLanguages.some(({ code }) => !nameTranslations[code].trim())
+        || !selectedInviteIds.length || !creatorServiceIds.length) return;
+    setSaving(true);
+    try {
+      await collaborationsApi.create({
+        supplierId: Number(creatorSupplierId),
+        names: Object.fromEntries(translationLanguages.map(({ code }) => [code, nameTranslations[code].trim()])),
+        invitedSupplierIds: selectedInviteIds.map(Number),
+        serviceIds: creatorServiceIds,
+      });
+      setNameTranslations({ en: "", fr: "", el: "", ar: "" });
+      setSelectedInviteIds([]);
+      setCreatorServiceIds([]);
+      await loadCollaborations();
+      onNotice(t("collaborationCreated"));
+    } catch (error) {
+      const status = error.response?.status;
+      onNotice(error.response?.data?.detail
+        || (status ? t("errorCreateCollaborationStatus", { status }) : t("errorCreateCollaborationConnection")));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function invite(collaborationId) {
+    const supplierId = inviteSuppliers[collaborationId];
+    if (!supplierId) return;
+    setSaving(true);
+    try {
+      await collaborationsApi.invite(collaborationId, Number(supplierId));
+      await loadCollaborations();
+      onNotice(t("collaborationInviteSent"));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorInviteSupplier"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeInvite(collaborationId, supplierId) {
+    setSaving(true);
+    try {
+      await collaborationsApi.removeInvite(collaborationId, supplierId);
+      await loadCollaborations();
+      onNotice(t("collaborationInvitationRemoved"));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorRemoveCollaborationInvite"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function respond(collaborationId, accepted) {
+    setSaving(true);
+    try {
+      await collaborationsApi.respond(collaborationId, accepted);
+      await loadCollaborations();
+      onNotice(t(accepted ? "collaborationAccepted" : "collaborationDeclined"));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorRespondCollaboration"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addServices(collaborationId) {
+    const serviceIds = selectedServices[collaborationId] || [];
+    if (!serviceIds.length) return;
+    setSaving(true);
+    try {
+      await collaborationsApi.addItems(collaborationId, serviceIds.map(Number));
+      setSelectedServices((current) => ({ ...current, [collaborationId]: [] }));
+      await loadCollaborations();
+      onNotice(t("collaborationServiceAdded"));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorAddCollaborationService"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleCreatorService(service, checked) {
+    setCreatorServiceIds((current) => {
+      if (!checked) return current.filter((id) => id !== service.id);
+      const currentSupplier = services.find((item) => current.includes(item.id))?.supplierId;
+      if (currentSupplier && currentSupplier !== service.supplierId) return current;
+      return [...current, service.id];
+    });
+  }
+
+  async function activate(collaborationId) {
+    setSaving(true);
+    try {
+      await collaborationsApi.activate(collaborationId);
+      await loadCollaborations();
+      onNotice(t("collaborationActivated"));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorActivateCollaboration"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleSelection(collaboration) {
+    setSaving(true);
+    try {
+      if (collaboration.selected) await collaborationsApi.unselect(collaboration.id);
+      else await collaborationsApi.select(collaboration.id);
+      await loadCollaborations();
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorSelectCollaboration"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <p className="workspace-loading">{t("loadingCollaborations")}</p>;
+  if (role === "SUPPLIER" && !profiles.length) {
+    return <EmptyState title={t("collaborationNoProfileTitle")} detail={t("collaborationNoProfileDetail")} />;
+  }
+
+  return <section className="collaborations-workspace">
+    {role === "SUPPLIER" && <form className="collaboration-create-form" onSubmit={createCollaboration}>
+      <div><h2>{t("createCollaboration")}</h2><p>{t("createCollaborationIntro")}</p></div>
+      {translationLanguages.map(({ code, label }) => <label key={code}>{t("collaborationName")} · {t(`language_${code}`)}
+        <input value={nameTranslations[code]} onChange={(event) => setNameTranslations((current) => ({ ...current, [code]: event.target.value }))} maxLength={150} required placeholder={t("collaborationNamePlaceholder", { language: label })} />
+      </label>)}
+      <fieldset className="collaboration-invite-picker">
+        <legend>{t("chooseYourServices")}</legend>
+        <p className="collaboration-readiness">{t("chooseOptionsFromOneProfile")}</p>
+        {services.map((service) => {
+          const selectedSupplierId = services.find((item) => creatorServiceIds.includes(item.id))?.supplierId;
+          return <label key={service.id}>
+            <input type="checkbox" checked={creatorServiceIds.includes(service.id)}
+              disabled={Boolean(selectedSupplierId && selectedSupplierId !== service.supplierId)}
+              onChange={(event) => toggleCreatorService(service, event.target.checked)} />
+            <span>{service.name} · {service.supplierName}{service.price != null ? ` · ${service.currency} ${service.price}` : ""}</span>
+          </label>;
+        })}
+        {!services.length && <p className="collaboration-readiness">{t(servicesLoading ? "loadingServices" : "noServicesForCollaboration")}</p>}
+      </fieldset>
+      <fieldset className="collaboration-invite-picker"><legend>{t("chooseSuppliersToInvite")}</legend>
+        {inviteCandidates.map((supplier) => <label key={supplier.id}>
+          <input type="checkbox" checked={selectedInviteIds.includes(supplier.id)} onChange={(event) => setSelectedInviteIds((current) => event.target.checked
+            ? [...current, supplier.id] : current.filter((id) => id !== supplier.id))} />
+          <span>{supplier.businessName}</span>
+        </label>)}
+      </fieldset>
+      <button className="primary-button" type="submit" disabled={saving || !eligibleProfiles.length || !creatorServiceIds.length || !selectedInviteIds.length}>{t("createCollaboration")}</button>
+    </form>}
+
+    {role === "CUSTOMER" && <div className="collaboration-intro"><h2>{t("coupleCollaborationsTitle")}</h2><p>{t("coupleCollaborationsIntro")}</p></div>}
+    {collaborations.length ? <div className="collaboration-list">
+      {collaborations.map((collaboration) => {
+        const ownMembers = collaboration.members.filter((member) => profileIds.includes(member.supplierId));
+        const pending = ownMembers.some((member) => member.status === "PENDING");
+        const isCreator = profileIds.includes(collaboration.creatorSupplierId);
+        const acceptedOwnedSupplierIds = ownMembers
+          .filter((member) => member.status === "ACCEPTED")
+          .map((member) => member.supplierId);
+        const availableServices = services.filter((service) =>
+          acceptedOwnedSupplierIds.includes(service.supplierId)
+          && !collaboration.items.some((item) => item.serviceId === service.id));
+        const candidates = inviteCandidates.filter((supplier) =>
+          !collaboration.members.some((member) => member.supplierId === supplier.id));
+        return <article className="collaboration-card" key={collaboration.id}>
+          <div className="collaboration-card-heading">
+            <div><span className="eyebrow">{t("collaborationSection")}</span><h2>{collaboration.name}</h2></div>
+            {role === "SUPPLIER" && pending && <span className="collaboration-status pending">{t("collaborationInvitation")}</span>}
+            {role === "SUPPLIER" && collaboration.active && <span className="collaboration-status">{t("collaborationActive")}</span>}
+          </div>
+          <div className="collaboration-members">
+            {collaboration.members.map((member) => <span key={member.supplierId}>
+              {member.supplierName}
+              {role === "SUPPLIER" && member.status !== "ACCEPTED" && ` · ${t(member.status === "PENDING" ? "collaborationPending" : "collaborationDeclinedStatus")}`}
+              {role === "SUPPLIER" && isCreator && !collaboration.active && member.status !== "ACCEPTED"
+                && <button type="button" className="collaboration-remove-invite" disabled={saving}
+                  aria-label={t("removeCollaborationInvite", { name: member.supplierName })}
+                  onClick={() => removeInvite(collaboration.id, member.supplierId)}><X size={12} /></button>}
+            </span>)}
+          </div>
+          {role === "SUPPLIER" && pending && <div className="collaboration-actions">
+            <button type="button" className="primary-button" disabled={saving} onClick={() => respond(collaboration.id, true)}>{t("acceptInvitation")}</button>
+            <button type="button" className="secondary-button" disabled={saving} onClick={() => respond(collaboration.id, false)}>{t("declineInvitation")}</button>
+          </div>}
+          <div className="collaboration-items">
+            {collaboration.items.map((item) => <div className="collaboration-item" key={item.id}>
+              {item.imageUrl && <img src={resolveMediaUrl(item.imageUrl)} alt="" />}
+              <div><strong>{item.serviceName}</strong><small>{item.supplierName}</small>{item.description && <p>{item.description}</p>}</div>
+              {item.price != null && <span className="collaboration-price">{item.currency} {item.price}</span>}
+            </div>)}
+            {!collaboration.items.length && <p className="collaboration-empty-items">{t("noCollaborationServices")}</p>}
+          </div>
+          {role === "SUPPLIER" && availableServices.length > 0 && !collaboration.active && <div className="collaboration-actions collaboration-manage">
+            <fieldset className="collaboration-invite-picker">
+              <legend>{t("chooseServicesForCollaboration")}</legend>
+              {availableServices.map((service) => <label key={service.id}>
+                <input type="checkbox"
+                  checked={(selectedServices[collaboration.id] || []).includes(String(service.id))}
+                  onChange={(event) => setSelectedServices((current) => {
+                    const selected = current[collaboration.id] || [];
+                    return { ...current, [collaboration.id]: event.target.checked
+                      ? [...selected, String(service.id)]
+                      : selected.filter((id) => id !== String(service.id)) };
+                  })} />
+                <span>{service.name} · {service.categoryName || service.supplierName}{service.price != null ? ` · ${service.currency} ${service.price}` : ""}</span>
+              </label>)}
+            </fieldset>
+            <button type="button" className="secondary-button" disabled={saving || !(selectedServices[collaboration.id] || []).length} onClick={() => addServices(collaboration.id)}>{t("addCollaborationServices")}</button>
+          </div>}
+          {role === "SUPPLIER" && isCreator && !collaboration.active && <div className="collaboration-actions collaboration-manage">
+            <label>{t("inviteSupplier")}<select value={inviteSuppliers[collaboration.id] || ""} onChange={(event) => setInviteSuppliers((current) => ({ ...current, [collaboration.id]: event.target.value }))}>
+              <option value="">{t("chooseSupplierToInvite")}</option>
+              {candidates.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.businessName}</option>)}
+            </select></label>
+            <button type="button" className="secondary-button" disabled={saving || !inviteSuppliers[collaboration.id]} onClick={() => invite(collaboration.id)}>{t("sendCollaborationInvite")}</button>
+          </div>}
+          {role === "SUPPLIER" && isCreator && !collaboration.active && <div className="collaboration-actions collaboration-manage">
+            <span className="collaboration-readiness">{collaboration.readyToActivate ? t("collaborationReady") : t("collaborationWaiting")}</span>
+            <button type="button" className="primary-button" disabled={saving || !collaboration.readyToActivate} onClick={() => activate(collaboration.id)}>{t("activateCollaboration")}</button>
+          </div>}
+          {role === "CUSTOMER" && <div className="collaboration-actions collaboration-manage">
+            <button type="button" className={collaboration.selected ? "secondary-button" : "primary-button"} disabled={saving} onClick={() => toggleSelection(collaboration)}>
+              {collaboration.selected ? t("collaborationSelected") : t("selectCollaboration")}
+            </button>
+          </div>}
+        </article>;
+      })}
+    </div> : <EmptyState
+      title={t(role === "SUPPLIER" ? "noSupplierCollaborations" : "noCoupleCollaborations")}
+      detail={t(role === "SUPPLIER" ? "noSupplierCollaborationsDetail" : "noCoupleCollaborationsDetail")}
+    />}
+  </section>;
+}
+
+function SupplierDashboard({ countryOptions, categories, onNotice }) {
   const { t, i18n } = useTranslation();
   const translationLanguages = [
     { code: "en", label: "English" },
@@ -1520,6 +1941,9 @@ function SupplierDashboard({ countryOptions, onNotice }) {
   const [editingServiceId, setEditingServiceId] = useState(null);
   const [serviceTranslations, setServiceTranslations] = useState(emptyServiceTranslations);
   const [servicePrice, setServicePrice] = useState("");
+  const [serviceCategoryId, setServiceCategoryId] = useState("");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+  const [categoriesSaving, setCategoriesSaving] = useState(false);
   const [availabilityServiceId, setAvailabilityServiceId] = useState(null);
   const [availabilityDates, setAvailabilityDates] = useState([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -1535,6 +1959,7 @@ function SupplierDashboard({ countryOptions, onNotice }) {
   }, [onNotice, t]);
   useEffect(() => {
     const profile = profiles.find((item) => String(item.id) === profileId);
+    if (profile) setSelectedCategoryIds((profile.categories || []).map((category) => category.id));
     if (profile) setForm({
       businessName: profile.businessName,
       location: profile.location,
@@ -1547,8 +1972,13 @@ function SupplierDashboard({ countryOptions, onNotice }) {
       longitude: profile.longitude ?? null,
       startingPrice: profile.startingPrice || "",
       currency: profile.currency || "USD",
+      contactEmail: profile.contactEmail || "",
       contactPhone: profile.contactPhone || "",
+      whatsapp: profile.whatsapp || "",
       website: profile.website || "",
+      facebook: profile.facebook || "",
+      instagram: profile.instagram || "",
+      tiktok: profile.tiktok || "",
     });
   }, [profileId, profiles]);
   useEffect(() => {
@@ -1583,6 +2013,7 @@ function SupplierDashboard({ countryOptions, onNotice }) {
     }
     setServiceTranslations(translations);
     setServicePrice(service.price ?? "");
+    setServiceCategoryId(String(service.categoryId || ""));
   }, [editingServiceId, serviceOffers]);
 
   async function saveProfile(event) {
@@ -1604,6 +2035,19 @@ function SupplierDashboard({ countryOptions, onNotice }) {
       onNotice(error.response?.data?.detail || t("errorSaveBusinessProfile"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveCategories() {
+    setCategoriesSaving(true);
+    try {
+      const { data } = await suppliersApi.updateCategories(profileId, selectedCategoryIds);
+      setProfiles((current) => current.map((profile) => profile.id === data.id ? data : profile));
+      onNotice(t("supplierCategoriesSaved"));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorSaveSupplierCategories"));
+    } finally {
+      setCategoriesSaving(false);
     }
   }
 
@@ -1653,6 +2097,7 @@ function SupplierDashboard({ countryOptions, onNotice }) {
     setEditingServiceId(null);
     setServiceTranslations(emptyServiceTranslations());
     setServicePrice("");
+    setServiceCategoryId("");
   }
 
   function editService(service) {
@@ -1666,6 +2111,7 @@ function SupplierDashboard({ countryOptions, onNotice }) {
     }
     setServiceTranslations(translations);
     setServicePrice(service.price ?? "");
+    setServiceCategoryId(String(service.categoryId || ""));
   }
 
   async function saveService(event) {
@@ -1678,6 +2124,7 @@ function SupplierDashboard({ countryOptions, onNotice }) {
         description: serviceTranslations[code].description.trim(),
       }])),
       price: servicePrice === "" ? null : Number(servicePrice),
+      categoryId: Number(serviceCategoryId),
     };
     const formData = new FormData();
     formData.append("service", new Blob([JSON.stringify(localizedRequest)], { type: "application/json" }));
@@ -1802,10 +2249,26 @@ function SupplierDashboard({ countryOptions, onNotice }) {
   const dashboardLocale = i18n.language === "el" ? "el-GR" : i18n.language === "fr" ? "fr-FR" : i18n.language === "ar" ? "ar" : "en-US";
   return <div className="supplier-dashboard">
     <nav className="supplier-dashboard-shortcuts" aria-label={t("supplierDashboardSections")}>
-      <a className="secondary-button" href="#supplier-bookable-options">{t("manageBookableOptions")} <ArrowDown size={14} /></a>
+      <a className="secondary-button" href="#supplier-services">{t("manageServices")} <ArrowDown size={14} /></a>
     </nav>
     <div className="dashboard-metrics"><article><span>{t("profileVisits")}</span><strong>{analytics?.visits ?? "—"}</strong></article><article><span>{t("bookings")}</span><strong>{analytics?.bookings ?? "—"}</strong></article><article><span>{t("messages")}</span><strong>{analytics?.messages ?? "—"}</strong></article><article><span>{t("profileStatus")}</span><strong>{profiles.find((item) => String(item.id) === profileId)?.approved ? t("live") : t("inReview")}</strong></article></div>
     {profiles.length > 1 && <label className="profile-picker">{t("businessProfile")}<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.businessName}</option>)}</select></label>}
+    <section className="supplier-services-editor supplier-categories-editor">
+      <div className="panel-heading"><div><h2>{t("supplierWorkCategories")}</h2><p>{t("supplierWorkCategoriesIntro")}</p></div></div>
+      <fieldset className="collaboration-invite-picker">
+        <legend>{t("chooseWorkCategories")}</legend>
+        {categories.map((category) => <label key={category.id}>
+          <input type="checkbox" checked={selectedCategoryIds.some((id) => Number(id) === category.id)}
+            onChange={(event) => setSelectedCategoryIds((current) => event.target.checked
+              ? [...current, category.id]
+              : current.filter((id) => Number(id) !== category.id))} />
+          <span>{category.name}</span>
+        </label>)}
+      </fieldset>
+      {!categories.length && <p className="supplier-section-message">{t("noWorkCategoriesAvailable")}</p>}
+      <button type="button" className="primary-button" disabled={categoriesSaving || !categories.length}
+        onClick={saveCategories}>{categoriesSaving ? t("saving") : t("saveWorkCategories")}</button>
+    </section>
     <form className="business-form" onSubmit={saveProfile}><div className="panel-heading"><div><h2>{t("editBusinessPage")}</h2><p>{t("businessProfileIntro")}</p></div><BriefcaseBusiness size={19} /></div>
       <label className="profile-translation-language">{t("editProfileLanguage")}<select value={profileLanguage} onChange={(event) => setProfileLanguage(event.target.value)}>{translationLanguages.map((item) => <option value={item.code} key={item.code}>{t(`language_${item.code}`)}</option>)}</select></label>
       <CountryMultiSelect label={t("countriesServed")} countryOptions={countryOptions} value={form.countryCodes} onChange={(countryCodes) => setForm((current) => ({ ...current, countryCodes }))} />
@@ -1816,8 +2279,20 @@ function SupplierDashboard({ countryOptions, onNotice }) {
       </section>
       <div className="business-form-grid">{[
         ["businessName", "businessName"], ["location", "location"], ["startingPrice", "startingPrice"],
-        ["currency", "currency"], ["contactPhone", "contactPhone"], ["website", "website"],
+        ["currency", "currency"],
       ].map(([field, label]) => <label key={field}>{t(label)}<input type={field === "startingPrice" ? "number" : "text"} min={field === "startingPrice" ? "0" : undefined} step={field === "startingPrice" ? "0.01" : undefined} value={["businessName", "location"].includes(field) ? profileTextValue(field) : form[field]} onChange={(event) => ["businessName", "location"].includes(field) ? updateProfileText(field, event.target.value) : setForm((current) => ({ ...current, [field]: event.target.value }))} /></label>)}
+      <section className="supplier-contact-editor wide-field">
+        <div><strong>{t("publicContactDetails")}</strong><p>{t("publicContactDetailsHelp")}</p></div>
+        <div className="business-form-grid">{[
+          ["contactEmail", "publicContactEmail", "email", 180],
+          ["contactPhone", "contactPhone", "tel", 30],
+          ["whatsapp", "whatsapp", "tel", 30],
+          ["website", "website", "text", 180],
+          ["facebook", "facebook", "text", 500],
+          ["instagram", "instagram", "text", 500],
+          ["tiktok", "tiktok", "text", 500],
+        ].map(([field, label, type, maxLength]) => <label key={field}>{t(label)}<input type={type} maxLength={maxLength} value={form[field]} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))} /></label>)}</div>
+      </section>
       <label className="wide-field">{t("description")}<textarea rows="4" maxLength="4000" value={profileTextValue("description")} onChange={(event) => updateProfileText("description", event.target.value)} /></label>
       <label className="wide-field">{t("servicesAndPackages")}<textarea rows="3" maxLength="500" value={profileTextValue("services")} onChange={(event) => updateProfileText("services", event.target.value)} /></label>
       <label className="wide-field">{t("availability")}<textarea rows="3" maxLength="8000" placeholder={t("availabilityPlaceholder")} value={profileTextValue("availability")} onChange={(event) => updateProfileText("availability", event.target.value)} /></label></div>
@@ -1832,7 +2307,7 @@ function SupplierDashboard({ countryOptions, onNotice }) {
       <div><strong>{t("mainSupplierImage")}</strong><p>{t("mainImageHelp")}</p><input name="mainImage" type="file" accept="image/jpeg,image/png,image/webp" required aria-label={t("chooseMainImage")} /></div>
       <button className="secondary-button" disabled={mainImageUploading}>{mainImageUploading ? t("uploading") : t("saveMainImage")}</button>
     </form>
-    <section className="supplier-services-editor" id="supplier-bookable-options">
+    <section className="supplier-services-editor" id="supplier-services">
       <div className="panel-heading"><div><h2>{t("manageServices")}</h2><p>{t("manageServicesIntro")}</p></div></div>
       {serviceLoading ? <p className="supplier-section-message">{t("loadingServices")}</p>
         : serviceOffers.length > 0 && <div className="service-editor-list">{serviceOffers.map((service) => {
@@ -1841,7 +2316,7 @@ function SupplierDashboard({ countryOptions, onNotice }) {
           const displayDescription = translated?.description || service.description;
           return <article className="service-editor-item" key={service.id}>
             {service.imageUrl && <img src={resolveMediaUrl(service.imageUrl)} alt={displayName || service.name} />}
-            <div><strong>{displayName || service.name}</strong><p>{displayDescription || service.description}</p></div>
+            <div><strong>{displayName || service.name}</strong><p>{service.categoryName}</p><p>{displayDescription || service.description}</p></div>
             <span>{service.price != null ? `${service.currency} ${service.price}` : t("priceOnRequest")}</span>
             <button type="button" className="booking-action" onClick={() => editService(service)}>{t("edit")}</button>
             <button type="button" className="booking-action" onClick={() => deleteService(service.id)}>{t("delete")}</button>
@@ -1893,11 +2368,19 @@ function SupplierDashboard({ countryOptions, onNotice }) {
             <label>{t("serviceName")}<input value={serviceTranslations[code].name} onChange={(event) => setServiceTranslations((current) => ({ ...current, [code]: { ...current[code], name: event.target.value } }))} maxLength="150" required /></label>
             <label>{t("serviceDescription")}<textarea rows="2" maxLength="2000" value={serviceTranslations[code].description} onChange={(event) => setServiceTranslations((current) => ({ ...current, [code]: { ...current[code], description: event.target.value } }))} /></label>
           </fieldset>)}
+          <label>{t("serviceCategory")}<select value={serviceCategoryId}
+            onChange={(event) => setServiceCategoryId(event.target.value)} required>
+            <option value="">{t("chooseWorkCategory")}</option>
+            {(selectedProfile?.categories || []).map((assignedCategory) => {
+              const category = categories.find((item) => item.id === assignedCategory.id) || assignedCategory;
+              return <option key={category.id} value={category.id}>{category.name}</option>;
+            })}
+          </select></label>
           <label>{t("price")}<input type="number" min="0" step="0.01" value={servicePrice} onChange={(event) => setServicePrice(event.target.value)} /></label>
           <label className="wide-field">{t("serviceImage")}<input name="serviceImage" type="file" accept="image/jpeg,image/png,image/webp" /></label>
         </div>
         <div className="service-editor-actions">
-          <button className="primary-button" disabled={serviceSaving}>{serviceSaving ? t("saving") : t(editingServiceId ? "saveService" : "addService")}</button>
+          <button className="primary-button" disabled={serviceSaving || !selectedProfile?.categories?.length}>{serviceSaving ? t("saving") : t(editingServiceId ? "saveService" : "addService")}</button>
           {editingServiceId && <button type="button" className="secondary-button" onClick={resetServiceForm}>{t("cancel")}</button>}
         </div>
       </form>
@@ -2055,10 +2538,10 @@ function ChecklistCard({ tasks, categories, progress, currencyCode = "USD", onTo
     <div className="progress-caption">{t("tasksDone", { completed: tasks.filter((task) => task.done).length, total: tasks.length })}</div>
     <div className="checklist-budget-total"><span>{t("totalBudget")}</span><strong>{formatBudget(totalBudgetCents / 100)}</strong></div>
     <div className="task-list">{tasks.slice(0, expanded ? undefined : 3).map((task) => <div className={`task-row${task.done ? " task-done" : ""}`} key={task.id}>
-      <button className="task-check" onClick={() => onToggle(task.id)} aria-label={task.done ? t("markIncomplete") : t("markComplete")}>{task.done && <Check size={13} />}</button>
-      <div className="task-copy"><span>{task.title}</span><small className="task-category">{categories.find((category) => category.slug === task.category)?.name || (task.category === "custom" ? t("general") : task.category)}</small>{task.budgetAmount != null && <small className="task-budget">{t("taskBudget")}: {formatBudget(task.budgetAmount)}</small>}{task.supplier && <small><CheckCircle2 size={12} /> {t("bookedWith", { supplier: task.supplier })}</small>}{task.contract && expanded && <small><ShieldCheck size={12} /> {task.contract} · {task.payment}</small>}</div>
+      <button className="task-check" onClick={() => onToggle(task.id)} disabled={task.collaborationSources?.length > 0} aria-label={task.done ? t("markIncomplete") : t("markComplete")}>{task.done && <Check size={13} />}</button>
+      <div className="task-copy"><span>{task.title}</span><small className="task-category">{categories.find((category) => category.slug === task.category)?.name || (task.category === "custom" ? t("general") : task.category)}</small>{task.budgetAmount != null && <small className="task-budget">{t("taskBudget")}: {formatBudget(task.budgetAmount)}</small>}{task.collaborationSources?.map((source) => <small className="task-collaboration" key={`${source.collaborationId}-${source.serviceId}`}><Users size={12} /> {t("collaborationServiceSource", { serviceName: source.serviceName, collaborationName: source.collaborationName })}</small>)}{task.supplier && <small><CheckCircle2 size={12} /> {t("bookedWith", { supplier: task.supplier })}</small>}{task.contract && expanded && <small><ShieldCheck size={12} /> {task.contract} · {task.payment}</small>}</div>
       <span className="task-due">{task.due}</span>
-      {expanded && <div className="task-actions">
+      {expanded && !task.derivedFromCollaboration && <div className="task-actions">
         <button className="task-edit" onClick={() => onEdit(task)} aria-label={t("editTaskNamed", { title: task.title })} title={t("editTask")}><Pencil size={14} /></button>
         <button className="task-remove" onClick={() => onRemove(task.id)} aria-label={t("removeTaskNamed", { title: task.title })} title={t("removeTask")}><Trash2 size={14} /></button>
       </div>}
@@ -2212,7 +2695,7 @@ function BookingDetailsModal({ booking, role, onClose, onQuote, onAccept, onDecl
       <div className="booking-detail-grid">
         <div><span>{t("eventDate")}</span><strong>{booking.eventDate}</strong></div>
         <div><span>{t("status")}</span><strong>{t(`status_${booking.status}`, { defaultValue: booking.status })}</strong></div>
-        {booking.serviceOfferingName && <div><span>{t("selectedOption")}</span><strong>{booking.serviceOfferingName}</strong></div>}
+        {booking.serviceOfferingName && <div><span>{t("selectedService")}</span><strong>{booking.serviceOfferingName}</strong></div>}
         {booking.quotedAmountCents && <div><span>{t("offer")}</span><strong>{(booking.quotedAmountCents / 100).toFixed(2)} {booking.currency}</strong></div>}
       </div>
       <div className="booking-request-notes"><strong>{t("notesFromCouple")}</strong><p>{booking.notes?.trim() || t("noAdditionalRequestDetails")}</p></div>
@@ -2276,9 +2759,21 @@ function SupplierModal({ supplier, countryOptions, saved, canContact, onSave, on
   }, [i18n.language, supplier.id]);
 
   const cover = media.find((item) => item.mediaType.startsWith("image/"));
-  const websiteUrl = supplier.website
-    ? (/^https?:\/\//i.test(supplier.website) ? supplier.website : `https://${supplier.website}`)
-    : null;
+  const profileLink = (value) => {
+    if (!value) return null;
+    if (/^[a-z][a-z\d+.-]*:/i.test(value) && !/^https?:\/\//i.test(value)) return null;
+    return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  };
+  const socialProfileLink = (platform, value) => {
+    if (!value) return null;
+    if (value.startsWith("@")) {
+      const base = platform === "facebook" ? "https://www.facebook.com" : `https://www.${platform}.com`;
+      return `${base}/${encodeURIComponent(value.slice(1))}`;
+    }
+    return profileLink(value);
+  };
+  const websiteUrl = profileLink(supplier.website);
+  const whatsappNumber = supplier.whatsapp?.replace(/\D/g, "");
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="supplier-modal" role="dialog" aria-modal="true" aria-label={t("supplierDetails", { name: supplier.name })}>
       <button className="modal-close" onClick={onClose} aria-label={t("closeDialog")}><X size={19} /></button>
@@ -2296,7 +2791,12 @@ function SupplierModal({ supplier, countryOptions, saved, canContact, onSave, on
           {supplier.services && <div className="supplier-profile-wide"><strong>{t("services")}</strong><p>{supplier.services}</p></div>}
           {supplier.availability && <div className="supplier-profile-wide"><strong>{t("availability")}</strong><p>{supplier.availability}</p></div>}
           {supplier.contactPhone && <a href={`tel:${supplier.contactPhone}`}><Phone size={15} /><span>{supplier.contactPhone}</span></a>}
+          {supplier.contactEmail && <a href={`mailto:${encodeURIComponent(supplier.contactEmail)}`}><Mail size={15} /><span>{supplier.contactEmail}</span></a>}
+          {whatsappNumber && <a href={`https://wa.me/${whatsappNumber}`} target="_blank" rel="noreferrer"><MessageCircle size={15} /><span>{t("whatsapp")}</span></a>}
           {websiteUrl && <a href={websiteUrl} target="_blank" rel="noreferrer"><Globe size={15} /><span>{supplier.website}</span></a>}
+          {supplier.facebook && socialProfileLink("facebook", supplier.facebook) && <a href={socialProfileLink("facebook", supplier.facebook)} target="_blank" rel="noreferrer"><Globe size={15} /><span>{t("facebook")}</span></a>}
+          {supplier.instagram && socialProfileLink("instagram", supplier.instagram) && <a href={socialProfileLink("instagram", supplier.instagram)} target="_blank" rel="noreferrer"><Globe size={15} /><span>{t("instagram")}</span></a>}
+          {supplier.tiktok && socialProfileLink("tiktok", supplier.tiktok) && <a href={socialProfileLink("tiktok", supplier.tiktok)} target="_blank" rel="noreferrer"><Globe size={15} /><span>{t("tiktok")}</span></a>}
         </div>
           <section className="supplier-services">
             <h3>{t("supplierServices")}</h3>
@@ -2307,9 +2807,10 @@ function SupplierModal({ supplier, countryOptions, saved, canContact, onSave, on
                     {service.imageUrl && <img src={resolveMediaUrl(service.imageUrl)} alt={service.name} loading="lazy" />}
                     <div className="supplier-service-card-body">
                       <h4>{service.name}</h4>
+                      {service.categoryName && <small>{service.categoryName}</small>}
                       {service.description && <p>{service.description}</p>}
                       <strong>{service.price != null ? `${service.currency} ${service.price}` : t("priceOnRequest")}</strong>
-                      {canContact && <button className="secondary-button" onClick={() => onBook(service)}>{t("requestThisOption")}</button>}
+                      {canContact && <button className="secondary-button" onClick={() => onBook(service)}>{t("requestThisService")}</button>}
                     </div>
                   </article>
                 ))}</div>
@@ -2402,17 +2903,17 @@ function BookingModal({ supplier, serviceOffering, options = [], onClose, onSubm
   const locale = i18n.language === "el" ? "el-GR" : i18n.language === "fr" ? "fr-FR" : i18n.language === "ar" ? "ar" : "en-US";
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="booking-modal" role="dialog" aria-modal="true" aria-label={t("requestBooking")}><button className="modal-close" onClick={onClose} aria-label={t("closeDialog")}><X size={19} /></button><div className="booking-modal-icon"><CalendarDays size={21} /></div><div className="eyebrow">{t("bookingEyebrow")}</div><h2>{t("askAboutDate")}</h2><p>{t("bookingIntro", { name: supplier.name })}</p>
     <form onSubmit={submit}>
-      {options.length > 0 && <label>{t("chooseBookableOption")}<select value={selectedOptionId}
+      {options.length > 0 && <label>{t("chooseService")}<select value={selectedOptionId}
         onChange={(event) => {
           setSelectedOptionId(event.target.value);
           setDate("");
           setAvailabilityDates([]);
         }} required>
-        <option value="" disabled>{t("chooseBookableOption")}</option>
+        <option value="" disabled>{t("chooseService")}</option>
         {options.map((option) => <option value={option.id} key={option.id}>{option.name}</option>)}
       </select></label>}
-      {selectedOffering && <p className="selected-option-label">{t("selectedOption")}: <strong>{selectedOffering.name}</strong></p>}
-      {selectedOffering ? <section className="availability-calendar" aria-label={t("availabilityCalendar")}>
+      {selectedOffering && <p className="selected-option-label">{t("selectedService")}: <strong>{selectedOffering.name}</strong></p>}
+      {selectedOffering ? <section className="availability-calendar" aria-label={t("serviceAvailabilityCalendar")}>
         <div className="availability-calendar-heading">
           <button type="button" className="booking-action" aria-label={t("previousMonth")} disabled={calendarMonth.getFullYear() === new Date().getFullYear() && calendarMonth.getMonth() <= new Date().getMonth()} onClick={() => { setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1)); setDate(""); }}>‹</button>
           <strong>{calendarMonth.toLocaleDateString(locale, { month: "long", year: "numeric" })}</strong>
@@ -2443,21 +2944,60 @@ function BookingModal({ supplier, serviceOffering, options = [], onClose, onSubm
     </form></section></div>;
 }
 
-function AuthModal({ account, initialMode, countryOptions, categories, onClose, onSignedIn, onSignOut }) {
+function AuthModal({ account, initialMode, countryOptions, onClose, onSignedIn, onSignOut }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [loginIdentifier, setLoginIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [businessName, setBusinessName] = useState("");
-  const [categorySlug, setCategorySlug] = useState("");
   const [location, setLocation] = useState("");
   const [countryCodes, setCountryCodes] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState("idle");
+
+  useEffect(() => {
+    if (mode === "login") {
+      setUsernameStatus("idle");
+      return undefined;
+    }
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername) {
+      setUsernameStatus("idle");
+      return undefined;
+    }
+    if (!/^[a-zA-Z0-9._-]{3,30}$/.test(normalizedUsername)) {
+      setUsernameStatus("invalid");
+      return undefined;
+    }
+    let active = true;
+    setUsernameStatus("checking");
+    const timeout = window.setTimeout(() => {
+      authApi.usernameAvailable(normalizedUsername).then(({ data }) => {
+        if (active) setUsernameStatus(data ? "available" : "taken");
+      }).catch(() => {
+        if (active) setUsernameStatus("error");
+      });
+    }, 350);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [mode, username]);
 
   async function submit(event) {
     event.preventDefault();
+    if (mode !== "login" && usernameStatus === "taken") {
+      setError(t("usernameTaken"));
+      return;
+    }
+    if (mode !== "login" && usernameStatus === "checking") return;
+    if (mode !== "login" && usernameStatus === "invalid") {
+      setError(t("usernameFormat"));
+      return;
+    }
     if (mode !== "login" && countryCodes.length === 0) {
       setError(t("countriesRequired"));
       return;
@@ -2466,10 +3006,10 @@ function AuthModal({ account, initialMode, countryOptions, categories, onClose, 
     setError("");
     try {
       const { data } = mode === "login"
-        ? await authApi.login({ email, password })
+        ? await authApi.login({ username: loginIdentifier, password })
         : mode === "supplier"
-          ? await authApi.registerSupplier({ name, email, password, businessName, categorySlug, location, countryCodes })
-          : await authApi.register({ name, email, password, countryCodes });
+          ? await authApi.registerSupplier({ name, username, password, businessName, location, countryCodes })
+          : await authApi.register({ name, username, password, countryCodes });
       onSignedIn(data);
     } catch (requestError) {
       const response = requestError.response;
@@ -2490,7 +3030,7 @@ function AuthModal({ account, initialMode, countryOptions, categories, onClose, 
       <button className="modal-close" onClick={onClose} aria-label={t("closeDialog")}><X size={19} /></button>
       {account ? <>
         <div className="eyebrow">{t("yourWedoraAccount")}</div><h2>{t("lovelyToSeeYou", { name: account.name })}</h2>
-        <p>{t("signedInPrivate", { email: account.email })}</p>
+        <p>{t("signedInPrivate", { username: account.username || account.email })}</p>
         <button className="secondary-button" onClick={onSignOut}>{t("signOut")}</button>
       </> : <>
         <div className="booking-modal-icon"><Heart size={20} /></div><div className="eyebrow">{t("littlePlaceForPlans")}</div>
@@ -2498,11 +3038,17 @@ function AuthModal({ account, initialMode, countryOptions, categories, onClose, 
         <p>{mode === "login" ? t("signInKeepPlans") : mode === "supplier" ? t("supplierProfileReviewInfo") : t("createPrivateAccountInfo")}</p>
         <form onSubmit={submit}>
           {mode !== "login" && <label>{t("yourName")}<input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={120} /></label>}
-          <label>{t("emailAddress")}<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={180} /></label>
+          {mode === "login"
+            ? <label>{t("usernameOrEmail")}<input type="text" autoComplete="username" value={loginIdentifier} onChange={(event) => setLoginIdentifier(event.target.value)} required maxLength={180} /></label>
+            : <>
+              <label>{t("username")}<input type="text" autoComplete="username" value={username}
+                onChange={(event) => { setUsername(event.target.value); setError(""); }}
+                minLength={3} maxLength={30} pattern="[a-zA-Z0-9._-]+" required /></label>
+              {usernameStatus !== "idle" && <p className={usernameStatus === "available" ? "username-availability available" : "username-availability"} role="status">{t(`usernameStatus_${usernameStatus}`)}</p>}
+            </>}
           <label>{t("password")}<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} required maxLength={72} /></label>
           {mode === "supplier" && <>
             <label>{t("businessName")}<input value={businessName} onChange={(event) => setBusinessName(event.target.value)} required maxLength={150} /></label>
-            <label>{t("supplierCategory")}<select value={categorySlug} onChange={(event) => setCategorySlug(event.target.value)} required><option value="">{t("chooseCategory")}</option>{categories.map((category) => <option key={category.slug || category.name} value={category.slug || ""}>{category.name}</option>)}</select></label>
             <label>{t("businessLocation")}<input value={location} onChange={(event) => setLocation(event.target.value)} required maxLength={180} /></label>
           </>}
           {mode !== "login" && <CountryMultiSelect
@@ -2510,6 +3056,7 @@ function AuthModal({ account, initialMode, countryOptions, categories, onClose, 
             countryOptions={countryOptions}
             value={countryCodes}
             onChange={setCountryCodes}
+            initiallyOpen
           />}
           {error && <p className="auth-error" role="alert">{error}</p>}
           <button className="primary-button submit-booking" type="submit" disabled={loading}>{loading ? t("oneMoment") : mode === "login" ? t("landingSignIn") : mode === "supplier" ? t("applyAsSupplier") : t("createYourAccount")} <ArrowRight size={14} /></button>

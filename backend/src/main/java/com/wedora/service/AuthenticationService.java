@@ -1,12 +1,10 @@
 package com.wedora.service;
 
 import com.wedora.domain.AppUser;
-import com.wedora.domain.Category;
 import com.wedora.domain.CountryCodes;
 import com.wedora.domain.CurrencyCode;
 import com.wedora.domain.Role;
 import com.wedora.domain.Supplier;
-import com.wedora.repository.CategoryRepository;
 import com.wedora.repository.ChecklistRepository;
 import com.wedora.repository.SupplierRepository;
 import com.wedora.repository.UserRepository;
@@ -31,17 +29,15 @@ import java.util.List;
 public class AuthenticationService {
     private final UserRepository users;
     private final SupplierRepository suppliers;
-    private final CategoryRepository categories;
     private final ChecklistRepository checklist;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
     public AuthenticationService(UserRepository users, SupplierRepository suppliers,
-                                 CategoryRepository categories, ChecklistRepository checklist, PasswordEncoder passwordEncoder,
+                                 ChecklistRepository checklist, PasswordEncoder passwordEncoder,
                                  JwtService jwtService) {
         this.users = users;
         this.suppliers = suppliers;
-        this.categories = categories;
         this.checklist = checklist;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -49,10 +45,11 @@ public class AuthenticationService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        ensureEmailAvailable(request.email());
+        ensureUsernameAvailable(request.username());
         AppUser user = new AppUser();
         user.setName(request.name().trim());
-        user.setEmail(normalizeEmail(request.email()));
+        user.setUsername(normalizeUsername(request.username()));
+        user.setEmail(internalEmailForUsername(user.getUsername()));
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(Role.CUSTOMER);
         user.setCountryCodes(CountryCodes.normalize(request.countryCodes()));
@@ -63,19 +60,17 @@ public class AuthenticationService {
 
     @Transactional
     public AuthResponse registerSupplier(SupplierRegistrationRequest request) {
-        ensureEmailAvailable(request.email());
-        Category category = categories.findBySlugAndActiveTrue(request.categorySlug())
-                .orElseThrow(() -> new ApiException.NotFound("Supplier category not found"));
+        ensureUsernameAvailable(request.username());
         AppUser user = new AppUser();
         user.setName(request.name().trim());
-        user.setEmail(normalizeEmail(request.email()));
+        user.setUsername(normalizeUsername(request.username()));
+        user.setEmail(internalEmailForUsername(user.getUsername()));
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(Role.SUPPLIER);
         users.save(user);
 
         Supplier supplier = new Supplier();
         supplier.setOwner(user);
-        supplier.setCategory(category);
         supplier.setBusinessName(request.businessName().trim());
         supplier.setSlug(createSlug(request.businessName()));
         supplier.setLocation(request.location().trim());
@@ -88,12 +83,23 @@ public class AuthenticationService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        AppUser user = users.findByEmailIgnoreCase(normalizeEmail(request.email()))
-                .orElseThrow(() -> new ApiException.Unauthorized("Email or password is incorrect"));
+        String identifier = request.username().trim();
+        AppUser user = (identifier.contains("@")
+                ? users.findByEmailIgnoreCase(normalizeEmail(identifier))
+                : users.findByUsernameIgnoreCase(normalizeUsername(identifier)))
+                .orElseThrow(() -> new ApiException.Unauthorized("Username or password is incorrect"));
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new ApiException.Unauthorized("Email or password is incorrect");
+            throw new ApiException.Unauthorized("Username or password is incorrect");
         }
         return response(user);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean usernameAvailable(String username) {
+        if (username == null || !username.trim().matches("^[a-zA-Z0-9._-]{3,30}$")) {
+            return false;
+        }
+        return !users.existsByUsernameIgnoreCase(normalizeUsername(username));
     }
 
     @Transactional
@@ -129,16 +135,21 @@ public class AuthenticationService {
         return response(user);
     }
 
-    private void ensureEmailAvailable(String email) {
-        if (users.existsByEmailIgnoreCase(normalizeEmail(email))) {
-            throw new ApiException.Conflict("An account with this email already exists");
+    private void ensureUsernameAvailable(String username) {
+        if (!usernameAvailable(username)) {
+            throw new ApiException.Conflict("That username is already taken");
         }
     }
 
     private AuthResponse response(AppUser user) {
-        return new AuthResponse(jwtService.createToken(user), user.getId(), user.getName(), user.getEmail(),
-                user.getRole(), user.getCountryCodes(), user.getWeddingDate(),
+        String accountEmail = user.getEmail().endsWith("@account.wedmaster.invalid") ? null : user.getEmail();
+        return new AuthResponse(jwtService.createToken(user), user.getId(), user.getName(), accountEmail,
+                user.getUsername(), user.getRole(), user.getCountryCodes(), user.getWeddingDate(),
                 user.getCurrencyCode() == null ? CurrencyCode.USD.name() : user.getCurrencyCode().name());
+    }
+
+    private String internalEmailForUsername(String username) {
+        return username + "@account.wedmaster.invalid";
     }
 
     private void seedChecklist(AppUser customer) {
@@ -162,6 +173,10 @@ public class AuthenticationService {
 
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeUsername(String username) {
+        return username.trim().toLowerCase(Locale.ROOT);
     }
 
     private String createSlug(String name) {

@@ -8,6 +8,7 @@ import java.time.LocalDate;
 public record UserNotificationResponse(
         Long id,
         Long bookingId,
+        Long collaborationId,
         String type,
         String actorName,
         LocalDate eventDate,
@@ -17,10 +18,11 @@ public record UserNotificationResponse(
     public static UserNotificationResponse from(UserNotification notification) {
         return new UserNotificationResponse(
                 notification.getId(),
-                notification.getBooking().getId(),
+                notification.getBooking() == null ? null : notification.getBooking().getId(),
+                notification.getCollaborationId(),
                 notification.getType(),
                 notification.getActorName(),
-                notification.getBooking().getEventDate(),
+                notification.getBooking() == null ? null : notification.getBooking().getEventDate(),
                 notification.getCreatedAt(),
                 notification.getReadAt() != null
         );

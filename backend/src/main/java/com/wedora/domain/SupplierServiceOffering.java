@@ -24,6 +24,9 @@ public class SupplierServiceOffering {
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     private Supplier supplier;
 
+    @ManyToOne(optional = false, fetch = FetchType.EAGER)
+    private Category category;
+
     @Column(nullable = false, length = 150)
     private String name;
 

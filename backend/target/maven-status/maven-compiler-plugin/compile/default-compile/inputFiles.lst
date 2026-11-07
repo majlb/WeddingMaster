@@ -7,6 +7,10 @@ C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\BookingSta
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\Category.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\ChatAttachment.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\ChecklistItem.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\CollaborationItem.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\CollaborationMember.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\CollaborationMemberStatus.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\CollaborationSelection.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\CountryCodes.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\CurrencyCode.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\Media.java
@@ -17,6 +21,7 @@ C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\Review.jav
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\Role.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\Supplier.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\SupplierAvailabilityBlock.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\SupplierCollaboration.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\SupplierServiceOffering.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\TranslationSupport.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\domain\UserNotification.java
@@ -24,11 +29,15 @@ C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\Bookin
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\CategoryRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\ChatAttachmentRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\ChecklistRepository.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\CollaborationItemRepository.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\CollaborationMemberRepository.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\CollaborationSelectionRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\MediaRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\MessageRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\PaymentRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\ReviewRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\SupplierAvailabilityBlockRepository.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\SupplierCollaborationRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\SupplierRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\SupplierServiceOfferingRepository.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\repository\UserNotificationRepository.java
@@ -46,6 +55,7 @@ C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\service\EmailNoti
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\service\MediaService.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\service\PaymentService.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\service\ReviewService.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\service\SupplierCollaborationService.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\service\SupplierService.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\service\SupplierServiceOfferingService.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\service\UserNotificationService.java
@@ -75,6 +85,12 @@ C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\ChatAttac
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\ChatMessageRequest.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\ChecklistRequest.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\ChecklistResponse.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\CollaborationCreateRequest.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\CollaborationInviteRequest.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\CollaborationItemRequest.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\CollaborationItemsRequest.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\CollaborationResponse.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\CollaborationResponseRequest.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\CountryPreferenceRequest.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\CurrencyPreferenceRequest.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\InvoiceResponse.java
@@ -94,6 +110,7 @@ C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\SupplierR
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\SupplierServiceRequest.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\SupplierServiceResponse.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\SupplierServiceTranslationRequest.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\SupplierUpdateCategoriesRequest.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\SupplierUpdateRequest.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\UserNotificationResponse.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\dto\WeddingDateRequest.java
@@ -101,6 +118,7 @@ C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\MediaControll
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\NotificationController.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\PaymentController.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\ReviewController.java
+C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\SupplierCollaborationController.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\SupplierController.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\SupplierServiceOfferingController.java
 C:\Maj_Projects\WeddingMaster\backend\src\main\java\com\wedora\web\UserProfileController.java

@@ -2,5 +2,9 @@ C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\domain\CountryCod
 C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\service\AuthenticationServiceWeddingDateTest.java
 C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\service\BookingServiceAvailabilityTest.java
 C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\service\ChecklistServiceTest.java
+C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\service\SupplierCollaborationServiceTest.java
 C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\service\WeddingAssistantServiceTest.java
+C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\web\dto\CollaborationResponseTest.java
+C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\web\dto\SupplierResponseTest.java
+C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\web\dto\UserNotificationResponseTest.java
 C:\Maj_Projects\WeddingMaster\backend\src\test\java\com\wedora\WedoraApplicationTest.java

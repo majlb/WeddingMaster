@@ -35,17 +35,28 @@ public class UserNotificationService {
     }
 
     public void notify(AppUser recipient, Booking booking, String type, String actorName) {
+        notify(recipient, booking, null, type, actorName);
+    }
+
+    public void notifyCollaboration(AppUser recipient, Long collaborationId, String type, String actorName) {
+        notify(recipient, null, collaborationId, type, actorName);
+    }
+
+    private void notify(AppUser recipient, Booking booking, Long collaborationId,
+                        String type, String actorName) {
         UserNotification notification = new UserNotification();
         notification.setRecipient(recipient);
         notification.setBooking(booking);
+        notification.setCollaborationId(collaborationId);
         notification.setType(type);
         notification.setActorName(actorName);
         UserNotification saved = notifications.save(notification);
         UserNotificationResponse response = UserNotificationResponse.from(saved);
+        String recipientEmail = recipient.getEmail();
         Runnable delivery = () -> {
             try {
                 messagingTemplate.getObject().convertAndSendToUser(
-                        recipient.getEmail(), "/queue/notifications", response);
+                        recipientEmail, "/queue/notifications", response);
             } catch (RuntimeException exception) {
                 logger.error("In-app notification delivery failed for notification {}", saved.getId(), exception);
             }

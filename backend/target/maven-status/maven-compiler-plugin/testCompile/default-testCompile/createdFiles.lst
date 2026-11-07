@@ -1,6 +1,10 @@
-com\wedora\WedoraApplicationTest.class
+com\wedora\service\SupplierCollaborationServiceTest.class
+com\wedora\web\dto\SupplierResponseTest.class
 com\wedora\service\AuthenticationServiceWeddingDateTest.class
+com\wedora\WedoraApplicationTest.class
 com\wedora\service\WeddingAssistantServiceTest.class
 com\wedora\service\ChecklistServiceTest.class
+com\wedora\web\dto\CollaborationResponseTest.class
+com\wedora\web\dto\UserNotificationResponseTest.class
 com\wedora\domain\CountryCodesTest.class
 com\wedora\service\BookingServiceAvailabilityTest.class

@@ -13,6 +13,7 @@ import java.util.Optional;
 public interface SupplierServiceOfferingRepository extends JpaRepository<SupplierServiceOffering, Long> {
     List<SupplierServiceOffering> findBySupplierIdOrderByIdAsc(Long supplierId);
     Optional<SupplierServiceOffering> findByIdAndSupplierId(Long id, Long supplierId);
+    boolean existsBySupplierIdAndCategoryId(Long supplierId, Long categoryId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select offering from SupplierServiceOffering offering where offering.id = :id")

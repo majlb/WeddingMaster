@@ -14,7 +14,10 @@ public record SupplierServiceResponse(
         BigDecimal price,
         String currency,
         String imageUrl,
-        Map<String, Map<String, String>> localizedContent
+        Map<String, Map<String, String>> localizedContent,
+        Long categoryId,
+        String categoryName,
+        String categorySlug
 ) {
     public static SupplierServiceResponse from(SupplierServiceOffering service) {
         String language = LocaleContextHolder.getLocale().getLanguage();
@@ -25,6 +28,10 @@ public record SupplierServiceResponse(
                 service.getPrice(),
                 service.getSupplier().getCurrency(),
                 service.getImageUrl(),
-                service.getLocalizedContent());
+                service.getLocalizedContent(),
+                service.getCategory().getId(),
+                TranslationSupport.value(service.getCategory().getTranslations(), language,
+                        "name", service.getCategory().getName()),
+                service.getCategory().getSlug());
     }
 }

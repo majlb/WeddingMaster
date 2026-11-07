@@ -138,8 +138,12 @@ public class WeddingAssistantService {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("name", clip(TranslationSupport.value(supplier.getLocalizedContent(), language,
                 "businessName", supplier.getBusinessName()), 120));
-        summary.put("category", clip(TranslationSupport.value(supplier.getCategory().getTranslations(), language,
-                "name", supplier.getCategory().getName()), 80));
+        var category = supplier.getCategory() != null ? supplier.getCategory()
+                : supplier.getCategories().stream().findFirst().orElse(null);
+        if (category != null) {
+            summary.put("category", clip(TranslationSupport.value(category.getTranslations(), language,
+                    "name", category.getName()), 80));
+        }
         summary.put("location", clip(TranslationSupport.value(supplier.getLocalizedContent(), language,
                 "location", supplier.getLocation()), 120));
         BigDecimal price = supplier.getStartingPrice();

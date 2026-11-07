@@ -31,6 +31,7 @@ export const suppliersApi = {
   media: (id) => api.get(`/suppliers/${id}/media`),
   uploadMedia: (id, formData) => api.post(`/suppliers/${id}/media`, formData),
   uploadMainImage: (id, formData) => api.post(`/suppliers/${id}/media/main-image`, formData),
+  updateCategories: (id, categoryIds) => api.put(`/suppliers/${id}/categories`, { categoryIds }),
 };
 export const supplierServicesApi = {
   list: (supplierId) => api.get(`/suppliers/${supplierId}/services`),
@@ -53,10 +54,34 @@ export const supplierServicesApi = {
     `/suppliers/me/${supplierId}/services/${serviceId}/availability/${date}`,
   ),
 };
+export const collaborationsApi = {
+  list: () => api.get("/collaborations"),
+  listPublic: () => api.get("/collaborations/public"),
+  create: (collaboration) => api.post("/collaborations", collaboration),
+  activate: (collaborationId) => api.post(`/collaborations/${collaborationId}/activate`),
+  invite: (collaborationId, supplierId) => api.post(
+    `/collaborations/${collaborationId}/invitations`, { supplierId },
+  ),
+  removeInvite: (collaborationId, supplierId) => api.delete(
+    `/collaborations/${collaborationId}/members/${supplierId}`,
+  ),
+  respond: (collaborationId, accepted) => api.post(
+    `/collaborations/${collaborationId}/response`, { accepted },
+  ),
+  addItem: (collaborationId, serviceId) => api.post(
+    `/collaborations/${collaborationId}/items`, { serviceId },
+  ),
+  addItems: (collaborationId, serviceIds) => api.post(
+    `/collaborations/${collaborationId}/items/batch`, { serviceIds },
+  ),
+  select: (collaborationId) => api.post(`/collaborations/${collaborationId}/select`),
+  unselect: (collaborationId) => api.delete(`/collaborations/${collaborationId}/select`),
+};
 export const authApi = {
   register: (details) => api.post("/auth/register", details),
   registerSupplier: (details) => api.post("/auth/register-supplier", details),
   login: (credentials) => api.post("/auth/login", credentials),
+  usernameAvailable: (username) => api.get("/auth/username-availability", { params: { username } }),
 };
 export const categoriesApi = {
   list: () => api.get("/categories"),

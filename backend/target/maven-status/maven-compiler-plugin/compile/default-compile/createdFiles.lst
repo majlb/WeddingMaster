@@ -3,6 +3,7 @@ com\wedora\web\dto\AvailabilityBlockRequest.class
 com\wedora\service\PaymentService.class
 com\wedora\web\ApiExceptionHandler.class
 com\wedora\service\UserNotificationService.class
+com\wedora\web\dto\CollaborationResponse$Member.class
 com\wedora\web\ApiException.class
 com\wedora\domain\Category.class
 com\wedora\config\AssistantConfiguration.class
@@ -11,11 +12,15 @@ com\wedora\security\JwtAuthenticationFilter.class
 com\wedora\domain\CountryCodes$CountryOption.class
 com\wedora\domain\ChatAttachment.class
 com\wedora\web\SupplierController.class
+com\wedora\web\dto\CollaborationItemsRequest.class
+com\wedora\repository\SupplierCollaborationRepository.class
 com\wedora\web\SupplierServiceOfferingController.class
 com\wedora\domain\Supplier.class
 com\wedora\web\dto\CategoryRequest.class
 com\wedora\web\dto\InvoiceResponse.class
 com\wedora\domain\ChecklistItem.class
+com\wedora\web\dto\CollaborationCreateRequest.class
+com\wedora\web\dto\SupplierUpdateCategoriesRequest.class
 com\wedora\repository\CategoryRepository.class
 com\wedora\repository\ReviewRepository.class
 com\wedora\web\dto\AssistantChatRequest$Message.class
@@ -30,8 +35,11 @@ com\wedora\web\dto\NotificationCenterResponse.class
 com\wedora\config\WebSocketConfig$1.class
 com\wedora\web\ApiException$NotFound.class
 com\wedora\web\UserProfileController.class
+com\wedora\domain\CollaborationMemberStatus.class
 com\wedora\config\WebSocketConfig.class
+com\wedora\web\dto\CollaborationResponse.class
 com\wedora\web\ChatController.class
+com\wedora\domain\CollaborationItem.class
 com\wedora\domain\Role.class
 com\wedora\service\SupplierService$SupplierAnalytics.class
 com\wedora\domain\BookingStatus.class
@@ -45,13 +53,16 @@ com\wedora\service\AuthenticationService.class
 com\wedora\web\dto\ReviewRequest.class
 com\wedora\web\dto\SupplierServiceResponse.class
 com\wedora\security\SecurityConfig.class
+com\wedora\web\dto\CollaborationInviteRequest.class
 com\wedora\repository\SupplierRepository.class
 com\wedora\WedoraApplication.class
 com\wedora\web\dto\AuthResponse.class
 com\wedora\service\BookingService.class
 com\wedora\web\dto\SupplierLocalizedContent.class
+com\wedora\domain\CollaborationMember.class
 com\wedora\domain\Booking.class
 com\wedora\web\dto\BookingRequest.class
+com\wedora\web\dto\CollaborationResponseRequest.class
 com\wedora\web\CategoryController.class
 com\wedora\web\dto\ChatAttachmentResponse.class
 com\wedora\web\dto\PaymentResponse.class
@@ -68,6 +79,8 @@ com\wedora\web\dto\MessageResponse.class
 com\wedora\web\dto\LoginRequest.class
 com\wedora\service\CategorySeeder.class
 com\wedora\web\dto\AvailabilityDateResponse.class
+com\wedora\web\SupplierCollaborationController.class
+com\wedora\web\dto\CollaborationItemRequest.class
 com\wedora\web\dto\ChatMessageRequest.class
 com\wedora\service\ChatService.class
 com\wedora\service\ChecklistService.class
@@ -82,6 +95,7 @@ com\wedora\web\AssistantController.class
 com\wedora\web\BookingController.class
 com\wedora\web\dto\ChecklistResponse.class
 com\wedora\web\dto\CountryPreferenceRequest.class
+com\wedora\repository\CollaborationMemberRepository.class
 com\wedora\web\AdminController.class
 com\wedora\service\MediaService.class
 com\wedora\web\dto\SupplierServiceTranslationRequest.class
@@ -91,7 +105,9 @@ com\wedora\service\ChatAttachmentService.class
 com\wedora\web\NotificationController.class
 com\wedora\web\CountryController.class
 com\wedora\service\EmailNotificationService.class
+com\wedora\repository\CollaborationItemRepository.class
 com\wedora\web\dto\AssistantChatRequest.class
+com\wedora\domain\CollaborationSelection.class
 com\wedora\web\ChecklistController.class
 com\wedora\web\dto\WeddingDateRequest.class
 com\wedora\web\dto\BookingResponse.class
@@ -103,6 +119,9 @@ com\wedora\web\dto\CategoryTranslation.class
 com\wedora\domain\TranslationSupport.class
 com\wedora\domain\Media.class
 com\wedora\web\dto\CurrencyPreferenceRequest.class
+com\wedora\domain\SupplierCollaboration.class
+com\wedora\service\SupplierCollaborationService.class
+com\wedora\web\dto\CollaborationResponse$Item.class
 com\wedora\domain\UserNotification.class
 com\wedora\domain\AppUser.class
 com\wedora\domain\Payment.class
@@ -114,4 +133,5 @@ com\wedora\web\dto\RefundResponse.class
 com\wedora\web\dto\MediaResponse.class
 com\wedora\repository\UserNotificationRepository.class
 com\wedora\web\MediaController.class
+com\wedora\repository\CollaborationSelectionRepository.class
 com\wedora\service\WeddingAssistantService.class

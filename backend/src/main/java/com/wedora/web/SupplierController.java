@@ -3,6 +3,7 @@ package com.wedora.web;
 import com.wedora.service.SupplierService;
 import com.wedora.web.dto.SupplierResponse;
 import com.wedora.web.dto.SupplierUpdateRequest;
+import com.wedora.web.dto.SupplierUpdateCategoriesRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -47,6 +48,12 @@ public class SupplierController {
     public SupplierResponse update(@PathVariable Long id, @AuthenticationPrincipal String email,
                                    @Valid @RequestBody SupplierUpdateRequest request) {
         return supplierService.updateOwned(id, email, request);
+    }
+
+    @PutMapping("/{id}/categories")
+    public SupplierResponse updateCategories(@PathVariable Long id, @AuthenticationPrincipal String email,
+                                             @Valid @RequestBody SupplierUpdateCategoriesRequest request) {
+        return supplierService.updateCategories(id, email, request.categoryIds());
     }
 
     @GetMapping("/me/{id}/analytics")

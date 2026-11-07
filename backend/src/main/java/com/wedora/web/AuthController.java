@@ -27,6 +27,11 @@ public class AuthController {
         return authenticationService.registerSupplier(request);
     }
 
+    @GetMapping("/username-availability")
+    public boolean usernameAvailability(@RequestParam String username) {
+        return authenticationService.usernameAvailable(username);
+    }
+
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authenticationService.login(request);
