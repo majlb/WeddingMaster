@@ -8,7 +8,7 @@ export default defineConfig({
     proxy: {
       "/api": { target: "https://weddingmaster.onrender.com", changeOrigin: true,secure: true },
       "/uploads": { target: "https://weddingmaster.onrender.com", changeOrigin: true,secure: true },
-      "/ws": { target: "https://weddingmaster.onrender.com",changeOrigin: true, ws: tru,secure: true, },
+      "/ws": { target: "https://weddingmaster.onrender.com",changeOrigin: true, ws: true,secure: true },
     },
   },
 });
