@@ -1,5 +1,6 @@
 .env
 .env.*
+.class
 !.env.example
 node_modules/
 dist/
