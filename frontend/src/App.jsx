@@ -213,6 +213,8 @@ function App() {
   const [directoryError, setDirectoryError] = useState(false);
   const [directoryCategories, setDirectoryCategories] = useState(categories);
   const [countryOptions, setCountryOptions] = useState([]);
+  const [countryLoadStatus, setCountryLoadStatus] = useState("loading");
+  const [countryLoadAttempt, setCountryLoadAttempt] = useState(0);
   const [apiBookings, setApiBookings] = useState(null);
   const [bookingsLoadError, setBookingsLoadError] = useState(false);
   const [checklistLoaded, setChecklistLoaded] = useState(false);
@@ -328,9 +330,28 @@ function App() {
     return () => window.removeEventListener("wedora:categories-updated", refreshCategories);
   }, [language, t]);
   useEffect(() => {
-    countriesApi.list().then(({ data }) => setCountryOptions(data))
-      .catch((error) => setNotice(error.response?.data?.detail || t("errorLoadCountries")));
-  }, [t]);
+    let active = true;
+    setCountryLoadStatus("loading");
+    countriesApi.list().then(({ data }) => {
+      if (!Array.isArray(data) || data.length === 0
+          || data.some((country) => !country.code || !country.name)) {
+        throw new Error("The countries API returned an invalid country list");
+      }
+      if (active) {
+        setCountryOptions(data);
+        setCountryLoadStatus("loaded");
+      }
+    }).catch((error) => {
+      if (!active) return;
+      setCountryOptions([]);
+      setCountryLoadStatus("error");
+      setNotice(error.response?.data?.detail || t("errorLoadCountries"));
+    });
+    return () => { active = false; };
+  }, [countryLoadAttempt, t]);
+  function retryCountryLoad() {
+    setCountryLoadAttempt((attempt) => attempt + 1);
+  }
   useEffect(() => {
     if (!supplierRoute) {
       setSelectedSupplier(null);
@@ -926,7 +947,7 @@ function App() {
             onSave={toggleSaved}
             onOpenSupplier={openSupplier}
           />}
-          {activePage === "home" && !isPublicLanding && account?.role === "CUSTOMER" && !account.countryCodes?.length && <CountryPreferences countryOptions={countryOptions} countryCodes={account.countryCodes || []} onSave={saveCountryPreferences} />}
+          {activePage === "home" && !isPublicLanding && account?.role === "CUSTOMER" && !account.countryCodes?.length && <CountryPreferences countryOptions={countryOptions} countryLoadStatus={countryLoadStatus} onRetryCountries={retryCountryLoad} countryCodes={account.countryCodes || []} onSave={saveCountryPreferences} />}
           {activePage === "home" && !isPublicLanding && account?.role === "CUSTOMER" && (
             <CoupleDashboard
               account={account}
@@ -955,7 +976,7 @@ function App() {
             {activePage === "discover" && <button className="secondary-button" onClick={() => setNotice(t("showingAllSuppliers"))}><SlidersHorizontal size={16} /> {t("filters")} <span className="filter-dot" /></button>}
           </div>}
 
-          {activePage === "discover" && hasPageAccess && account?.role === "CUSTOMER" && <CountryPreferences countryOptions={countryOptions} countryCodes={account.countryCodes || []} onSave={saveCountryPreferences} />}
+          {activePage === "discover" && hasPageAccess && account?.role === "CUSTOMER" && <CountryPreferences countryOptions={countryOptions} countryLoadStatus={countryLoadStatus} onRetryCountries={retryCountryLoad} countryCodes={account.countryCodes || []} onSave={saveCountryPreferences} />}
           {activePage === "discover" && hasPageAccess && <><div className="filter-chips">{["All", ...directoryCategories.map(({ name }) => name)].map((category) => <button key={category} className={selectedCategory === category ? "filter-chip selected" : "filter-chip"} onClick={() => setSelectedCategory(category)}>{category === "All" ? t("allCategories") : supplierCategoryLabel(t, category)}</button>)}</div>
             <div className="results-caption"><span>{t("supplierFinds", { count: filteredSuppliers.length })}</span><button onClick={() => setNotice(t("sortedByRecommended"))}>{t("recommendedSort")} <ChevronDown size={15} /></button></div>
             {filteredSuppliers.length ? <div className="supplier-grid discover-grid">{filteredSuppliers.map((supplier) => <SupplierCard key={supplier.id} supplier={supplier} saved={saved.includes(supplier.id)} onSave={toggleSaved} onOpen={openSupplier} />)}</div> : <EmptyState title={t("noSuppliersTitle")} detail={account?.role === "CUSTOMER" && !account.countryCodes?.length ? t("chooseCountryBeforeBrowsing") : t("noSuppliersDetail")} action={() => { setQuery(""); setSelectedCategory("All"); }} actionLabel={t("browseSuppliers")} />}
@@ -993,14 +1014,14 @@ function App() {
             ? <ChatInbox bookings={apiBookings} user={account} initialBookingId={focusedMessageBookingId} onNotice={setNotice} />
             : activePage === "messages" && (account?.role === "CUSTOMER" || account?.role === "SUPPLIER") && <div className="messages-empty"><div className="messages-illustration"><MessageCircle size={38} /><span>✿</span></div><div className="eyebrow">{t("yourWorkspace").toUpperCase()}</div><h2>{t("messagesEmptyTitle")}</h2><p>{account.role === "SUPPLIER" ? t("supplierMessagesEmpty") : t("customerMessagesEmpty")}</p><button className="primary-button" onClick={() => setActivePage(account.role === "SUPPLIER" ? "bookings" : "discover")}>{account.role === "SUPPLIER" ? t("viewBookingEnquiries") : t("meetSuppliers")} <ArrowRight size={15} /></button></div>}
           {activePage === "collaborations" && account && (account.role === "CUSTOMER" || (account.role === "SUPPLIER" && supplierCollaborationEligible)) && <CollaborationsWorkspace role={account.role} onNotice={setNotice} onSelectedCollaborations={setSelectedCollaborations} />}
-          {activePage === "supplierDashboard" && account?.role === "SUPPLIER" && <SupplierDashboard countryOptions={countryOptions} categories={directoryCategories} onNotice={setNotice} />}
+          {activePage === "supplierDashboard" && account?.role === "SUPPLIER" && <SupplierDashboard countryOptions={countryOptions} countryLoadStatus={countryLoadStatus} onRetryCountries={retryCountryLoad} categories={directoryCategories} onNotice={setNotice} />}
           {activePage === "admin" && account?.role === "ADMIN" && <AdminDashboard onNotice={setNotice} />}
         </div>
       </main>
 
       {selectedSupplier && <SupplierModal supplier={selectedSupplier} countryOptions={countryOptions} saved={saved.includes(selectedSupplier.id)} canContact={account?.role === "CUSTOMER"} onSave={toggleSaved} onClose={closeSupplier} onBook={(offering = null, options = []) => setBookingSupplier({ supplier: selectedSupplier, offering, options })} onMessage={() => { setNotice(t("supplierConversationReady", { name: selectedSupplier.name })); closeSupplier(); setActivePage("messages"); }} />}
       {bookingSupplier && <BookingModal supplier={bookingSupplier.supplier} serviceOffering={bookingSupplier.offering} options={bookingSupplier.options} onClose={() => setBookingSupplier(null)} onSubmit={(details) => bookSupplier(bookingSupplier.supplier, details)} />}
-      {authOpen && <AuthModal key={authMode} initialMode={authMode} account={account} countryOptions={countryOptions} onClose={() => setAuthOpen(false)} onSignedIn={(user) => {
+      {authOpen && <AuthModal key={authMode} initialMode={authMode} account={account} countryOptions={countryOptions} countryLoadStatus={countryLoadStatus} onRetryCountries={retryCountryLoad} onClose={() => setAuthOpen(false)} onSignedIn={(user) => {
         localStorage.setItem("wedora-token", user.token);
         localStorage.setItem("wedora-user", JSON.stringify(user));
         setSaved(user.role === "CUSTOMER" ? readSavedSuppliers(user.id) : []);
@@ -1320,7 +1341,15 @@ function localizedCountryName(code, language, options = []) {
   }
 }
 
-function CountryMultiSelect({ label, countryOptions = [], value = [], onChange, initiallyOpen = false }) {
+function CountryMultiSelect({
+  label,
+  countryOptions = [],
+  countryLoadStatus = "loaded",
+  onRetryCountries,
+  value = [],
+  onChange,
+  initiallyOpen = false,
+}) {
   const { t, i18n } = useTranslation();
   const [search, setSearch] = useState("");
   const detailsRef = useRef(null);
@@ -1335,25 +1364,65 @@ function CountryMultiSelect({ label, countryOptions = [], value = [], onChange, 
       ? value.filter((selected) => selected !== code)
       : [...value, code]);
   }
+  const summaryText = countryLoadStatus === "loading"
+    ? t("countryListLoading")
+    : countryLoadStatus === "error"
+      ? t("countryListUnavailable")
+      : value.length
+        ? t("selectedCountriesCount", { count: value.length })
+        : t("chooseCountries");
   return <div className="country-multi-select">
     <span className="country-select-label">{label}</span>
     <details ref={detailsRef} className="country-select-details">
-      <summary>{value.length ? t("selectedCountriesCount", { count: value.length }) : t("chooseCountries")}</summary>
+      <summary>
+        <Globe size={16} aria-hidden="true" />
+        <span>{summaryText}</span>
+        <ChevronDown size={15} aria-hidden="true" />
+      </summary>
       <div className="country-options-panel">
-        <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("searchCountries")} aria-label={t("searchCountries")} />
-        <div className="country-options-list">
+        <label className="country-search-field">
+          <Search size={15} aria-hidden="true" />
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+            placeholder={t("searchCountries")} aria-label={t("searchCountries")}
+            disabled={countryLoadStatus !== "loaded"} />
+        </label>
+        {countryLoadStatus === "loading" && <div className="country-options-message" role="status">
+          <span className="country-loading-indicator" />{t("countryListLoading")}
+        </div>}
+        {countryLoadStatus === "error" && <div className="country-options-message country-options-error" role="alert">
+          <span>{t("countryListUnavailable")}</span>
+          <button type="button" className="text-button" onClick={onRetryCountries}>{t("retryCountryList")}</button>
+        </div>}
+        {countryLoadStatus === "loaded" && <div className="country-options-list">
           {filteredOptions.map((country) => <label key={country.code}>
             <input type="checkbox" checked={value.includes(country.code)} onChange={() => toggleCountry(country.code)} />
+            <span className="country-code-badge">{country.code}</span>
             <span>{localizedCountryName(country.code, i18n.language, countryOptions)}</span>
           </label>)}
-          {!countryOptions.length && <span className="country-options-empty">{t("countryListLoading")}</span>}
-        </div>
+          {!filteredOptions.length && <span className="country-options-empty">{t("noCountriesMatch")}</span>}
+        </div>}
       </div>
     </details>
+      {value.length > 0 && <div className="country-selected-list" aria-label={t("selectedCountries")}>
+        {value.map((code) => <button type="button" className="country-selected-chip" key={code}
+          onClick={() => toggleCountry(code)} aria-label={t("removeCountry", {
+            country: localizedCountryName(code, i18n.language, countryOptions),
+          })}>
+          <span className="country-code-badge">{code}</span>
+          <span>{localizedCountryName(code, i18n.language, countryOptions)}</span>
+          <X size={13} aria-hidden="true" />
+        </button>)}
+      </div>}
   </div>;
 }
 
-function CountryPreferences({ countryOptions, countryCodes, onSave }) {
+function CountryPreferences({
+  countryOptions,
+  countryLoadStatus,
+  onRetryCountries,
+  countryCodes,
+  onSave,
+}) {
   const { t } = useTranslation();
   const [selectedCountries, setSelectedCountries] = useState(countryCodes);
   const [saving, setSaving] = useState(false);
@@ -1368,8 +1437,10 @@ function CountryPreferences({ countryOptions, countryCodes, onSave }) {
   }
   return <section className="country-preferences">
     <div><strong>{t("countryFilterTitle")}</strong><p>{t("countryFilterIntro")}</p></div>
-    <CountryMultiSelect label={t("yourCountries")} countryOptions={countryOptions} value={selectedCountries} onChange={setSelectedCountries} />
-    <button className="primary-button" disabled={saving || !selectedCountries.length} onClick={save}>{saving ? t("saving") : t("saveCountryPreferences")}</button>
+    <CountryMultiSelect label={t("yourCountries")} countryOptions={countryOptions}
+      countryLoadStatus={countryLoadStatus} onRetryCountries={onRetryCountries}
+      value={selectedCountries} onChange={setSelectedCountries} />
+    <button className="primary-button" disabled={saving || !selectedCountries.length || countryLoadStatus !== "loaded"} onClick={save}>{saving ? t("saving") : t("saveCountryPreferences")}</button>
   </section>;
 }
 
@@ -1916,7 +1987,7 @@ function CollaborationsWorkspace({ role, onNotice, onSelectedCollaborations }) {
   </section>;
 }
 
-function SupplierDashboard({ countryOptions, categories, onNotice }) {
+function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries, categories, onNotice }) {
   const { t, i18n } = useTranslation();
   const translationLanguages = [
     { code: "en", label: "English" },
@@ -2271,7 +2342,9 @@ function SupplierDashboard({ countryOptions, categories, onNotice }) {
     </section>
     <form className="business-form" onSubmit={saveProfile}><div className="panel-heading"><div><h2>{t("editBusinessPage")}</h2><p>{t("businessProfileIntro")}</p></div><BriefcaseBusiness size={19} /></div>
       <label className="profile-translation-language">{t("editProfileLanguage")}<select value={profileLanguage} onChange={(event) => setProfileLanguage(event.target.value)}>{translationLanguages.map((item) => <option value={item.code} key={item.code}>{t(`language_${item.code}`)}</option>)}</select></label>
-      <CountryMultiSelect label={t("countriesServed")} countryOptions={countryOptions} value={form.countryCodes} onChange={(countryCodes) => setForm((current) => ({ ...current, countryCodes }))} />
+      <CountryMultiSelect label={t("countriesServed")} countryOptions={countryOptions}
+        countryLoadStatus={countryLoadStatus} onRetryCountries={onRetryCountries}
+        value={form.countryCodes} onChange={(countryCodes) => setForm((current) => ({ ...current, countryCodes }))} />
       <section className="supplier-location-editor">
         <div><strong>{t("pinBusinessLocation")}</strong><p>{t("pinBusinessLocationHelp")}</p></div>
         <SupplierLocationMap value={{ latitude: form.latitude, longitude: form.longitude }} interactive onChange={({ latitude, longitude }) => setForm((current) => ({ ...current, latitude, longitude }))} />
@@ -2944,7 +3017,16 @@ function BookingModal({ supplier, serviceOffering, options = [], onClose, onSubm
     </form></section></div>;
 }
 
-function AuthModal({ account, initialMode, countryOptions, onClose, onSignedIn, onSignOut }) {
+function AuthModal({
+  account,
+  initialMode,
+  countryOptions,
+  countryLoadStatus,
+  onRetryCountries,
+  onClose,
+  onSignedIn,
+  onSignOut,
+}) {
   const { t } = useTranslation();
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState("");
@@ -3054,6 +3136,8 @@ function AuthModal({ account, initialMode, countryOptions, onClose, onSignedIn, 
           {mode !== "login" && <CountryMultiSelect
             label={t(mode === "supplier" ? "countriesServed" : "yourCountries")}
             countryOptions={countryOptions}
+            countryLoadStatus={countryLoadStatus}
+            onRetryCountries={onRetryCountries}
             value={countryCodes}
             onChange={setCountryCodes}
             initiallyOpen
