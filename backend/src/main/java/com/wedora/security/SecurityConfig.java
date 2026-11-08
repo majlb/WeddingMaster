@@ -73,6 +73,7 @@ public class SecurityConfig {
         if (environment.matchesProfiles("!prod")) {
             allowedOrigins.add("http://localhost:5173");
             allowedOrigins.add("http://127.0.0.1:5173");
+            allowedOrigins.add("https://weddingmaster-web.onrender.com");
         }else {
              allowedOrigins.add("https://weddingmaster-web.onrender.com");
         }
