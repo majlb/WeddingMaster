@@ -18,8 +18,17 @@ export const websocketUrl = import.meta.env.VITE_WS_URL
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("wedora-token");
   const isAuthenticationRequest = config.url?.startsWith("/auth/");
-  if (token && !isAuthenticationRequest) config.headers.Authorization = `Bearer ${token}`;
-  else if (isAuthenticationRequest) delete config.headers.Authorization;
+  if (
+    token &&
+    token !== "undefined" &&
+    token !== "null" &&
+    !isAuthenticationRequest
+    ) {
+        config.headers.Authorization = `Bearer ${token}`;
+    } else {
+        delete config.headers.Authorization;
+    }
+ 
   config.headers["Accept-Language"] = localStorage.getItem("wedora-language") || "en";
   return config;
 });
