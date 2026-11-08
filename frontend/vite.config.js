@@ -6,9 +6,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": { target: "https://weddingmaster.onrender.com", changeOrigin: true },
-      "/uploads": { target: "https://weddingmaster.onrender.com", changeOrigin: true },
-      "/ws": { target: "https://weddingmaster.onrender.com", ws: true },
+      "/api": { target: "https://weddingmaster.onrender.com", changeOrigin: true,secure: true },
+      "/uploads": { target: "https://weddingmaster.onrender.com", changeOrigin: true,secure: true },
+      "/ws": { target: "https://weddingmaster.onrender.com",changeOrigin: true, ws: tru,secure: true, },
     },
   },
 });
