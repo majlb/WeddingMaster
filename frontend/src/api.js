@@ -1,12 +1,16 @@
 import axios from "axios";
 
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/api",
   timeout: 10000,
 });
 export function resolveMediaUrl(url) {
+  
   if (!url) return "";
   const apiBase = new URL(import.meta.env.VITE_API_URL || "/api", window.location.origin);
+console.log("VITE_API_URL =", import.meta.env.VITE_API_URL);
+console.log("Axios baseURL =", api.defaults.baseURL);
   return new URL(url, apiBase).toString();
 }
 export const websocketUrl = import.meta.env.VITE_WS_URL
