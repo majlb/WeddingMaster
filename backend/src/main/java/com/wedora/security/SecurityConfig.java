@@ -79,10 +79,17 @@ public class SecurityConfig {
         }
         configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-       configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Stripe-Signature", "Accept-Language"));
+       
+        configuration.setAllowedHeaders(List.of("*"));
+
         configuration.setExposedHeaders(List.of("Location"));
+
+        configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
+
+
+
         return source;
     }
 }
