@@ -73,7 +73,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: /api
+        VITE_API_URL: https://weddingmaster.onrender.com/api
         VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
     ports:
       - "8081:80"
