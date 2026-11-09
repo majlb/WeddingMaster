@@ -2478,7 +2478,7 @@ function GuestsWorkspace({ onNotice }) {
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState(null);
-  const [formData, setFormData] = useState({ name: "", numberOfPeople: 1, phoneNumber: "", approved: false });
+  const [formData, setFormData] = useState({ name: "", personCount: 1, phone: "", approved: false });
 
   async function loadGuests() {
     setLoading(true);
@@ -2498,13 +2498,13 @@ function GuestsWorkspace({ onNotice }) {
 
   function openAddGuest() {
     setEditingGuest(null);
-    setFormData({ name: "", numberOfPeople: 1, phoneNumber: "", approved: false });
+    setFormData({ name: "", personCount: 1, phone: "", approved: false });
     setModalOpen(true);
   }
 
   function openEditGuest(guest) {
     setEditingGuest(guest);
-    setFormData({ name: guest.name, numberOfPeople: guest.numberOfPeople, phoneNumber: guest.phoneNumber, approved: guest.approved });
+    setFormData({ name: guest.name, personCount: guest.personCount, phone: guest.phone, approved: guest.approved });
     setModalOpen(true);
   }
 
@@ -2543,12 +2543,22 @@ function GuestsWorkspace({ onNotice }) {
     }
   }
 
+  const totalGuestCount = guests.reduce((total, guest) => total + (Number(guest.personCount) || 0), 0);
+  const approvedGuestCount = guests.reduce(
+    (total, guest) => total + (guest.approved ? Number(guest.personCount) || 0 : 0),
+    0,
+  );
+
   if (loading) return <p className="workspace-loading">{t("loadingGuests")}</p>;
   return <div className="guests-workspace"><div className="panel-heading"><div><h2>{t("guests")}</h2><p>{t("guestsIntro")}</p></div><Users size={20} /></div>
     <button className="primary-button" onClick={openAddGuest}><span>+</span> {t("addGuest")}</button>
-    {guests.length > 0 ? <div className="guest-list"><table><thead><tr><th>{t("guestName")}</th><th>{t("numberOfPeople")}</th><th>{t("phoneNumber")}</th><th>{t("approved")}</th><th>Actions</th></tr></thead><tbody>{guests.map((guest) => <tr key={guest.id}><td>{guest.name}</td><td>{guest.numberOfPeople}</td><td>{guest.phoneNumber}</td><td>{guest.approved ? "✓" : "—"}</td><td><button className="booking-action" onClick={() => openEditGuest(guest)}>{t("edit")}</button><button className="booking-action" onClick={() => deleteGuest(guest.id)}>{t("delete")}</button></td></tr>)}</tbody></table></div> : <EmptyState title={t("noGuests")} detail={t("startAddingGuests")} action={openAddGuest} actionLabel={t("addGuest")} />}
+    <div className="guest-count-summary">
+      <article><span>{t("totalGuests")}</span><strong>{totalGuestCount}</strong></article>
+      <article><span>{t("approvedGuests")}</span><strong>{approvedGuestCount} / {totalGuestCount}</strong></article>
+    </div>
+    {guests.length > 0 ? <div className="guest-list"><table><thead><tr><th>{t("guestName")}</th><th>{t("numberOfPeople")}</th><th>{t("phoneNumber")}</th><th>{t("approved")}</th><th>Actions</th></tr></thead><tbody>{guests.map((guest) => <tr key={guest.id}><td>{guest.name}</td><td>{guest.personCount}</td><td>{guest.phone}</td><td>{guest.approved ? "✓" : "—"}</td><td><button className="booking-action" onClick={() => openEditGuest(guest)}>{t("edit")}</button><button className="booking-action" onClick={() => deleteGuest(guest.id)}>{t("delete")}</button></td></tr>)}</tbody></table></div> : <EmptyState title={t("noGuests")} detail={t("startAddingGuests")} action={openAddGuest} actionLabel={t("addGuest")} />}
     {modalOpen && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalOpen(false)}><section className="booking-modal" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setModalOpen(false)} aria-label={t("closeDialog")}><X size={19} /></button><h2>{editingGuest ? t("editGuest") : t("addGuest")}</h2>
-      <form onSubmit={saveGuest}><input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder={t("guestName")} required /><input type="number" value={formData.numberOfPeople} onChange={(e) => setFormData({ ...formData, numberOfPeople: parseInt(e.target.value) || 1 })} placeholder={t("numberOfPeople")} min="1" required /><input value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} placeholder={t("phoneNumber")} /><label><input type="checkbox" checked={formData.approved} onChange={(e) => setFormData({ ...formData, approved: e.target.checked })} /> {t("approved")}</label><button className="primary-button" disabled={saving}>{saving ? t("saving") : editingGuest ? t("saveChanges") : t("addGuest")}</button></form>
+      <form onSubmit={saveGuest}><input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder={t("guestName")} required /><input type="number" value={formData.personCount} onChange={(e) => setFormData({ ...formData, personCount: e.target.value === "" ? "" : Number(e.target.value) })} placeholder={t("numberOfPeople")} min="1" required /><input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder={t("phoneNumber")} /><label><input type="checkbox" checked={formData.approved} onChange={(e) => setFormData({ ...formData, approved: e.target.checked })} /> {t("approved")}</label><button className="primary-button" disabled={saving}>{saving ? t("saving") : editingGuest ? t("saveChanges") : t("addGuest")}</button></form>
     </section></div>}
   </div>;
 }

@@ -45,7 +45,7 @@ public class GuestController {
         guest.setName(request.name().trim());
         guest.setPersonCount(request.personCount());
         guest.setPhone(request.phone() != null ? request.phone().trim() : null);
-        guest.setApproved(false);
+        guest.setApproved(request.approved());
 
         return GuestResponse.from(guestRepository.save(guest));
     }
@@ -62,6 +62,7 @@ public class GuestController {
         guest.setName(request.name().trim());
         guest.setPersonCount(request.personCount());
         guest.setPhone(request.phone() != null ? request.phone().trim() : null);
+        guest.setApproved(request.approved());
 
         return GuestResponse.from(guestRepository.save(guest));
     }

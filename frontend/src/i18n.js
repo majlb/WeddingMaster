@@ -80,6 +80,8 @@ const translations = {
       
       guests: "Guest list",
       guestsIntro: "Manage and organize your guest list",
+      totalGuests: "Total guests",
+      approvedGuests: "Approved guests",
       addGuest: "Add guest",
       guestName: "Guest name",
       guestNameRequired: "Guest name is required",
@@ -222,6 +224,8 @@ const translations = {
       
       guests: "Liste des invités",
       guestsIntro: "Gérez et organisez votre liste d'invités",
+      totalGuests: "Total des invités",
+      approvedGuests: "Invités confirmés",
       addGuest: "Ajouter un invité",
       guestName: "Nom de l'invité",
       guestNameRequired: "Le nom de l'invité est requis",
@@ -364,6 +368,8 @@ const translations = {
       
       guests: "Λίστα καλεσμένων",
       guestsIntro: "Διαχείριση και οργάνωση της λίστας καλεσμένων",
+      totalGuests: "Σύνολο καλεσμένων",
+      approvedGuests: "Επιβεβαιωμένοι καλεσμένοι",
       addGuest: "Προσθήκη καλεσμένου",
       guestName: "Όνομα καλεσμένου",
       guestNameRequired: "Το όνομα του καλεσμένου είναι υποχρεωτικό",
@@ -506,6 +512,8 @@ const translations = {
       
       guests: "قائمة الضيوف",
       guestsIntro: "إدارة وتنظيم قائمة الضيوف الخاصة بك",
+      totalGuests: "إجمالي الضيوف",
+      approvedGuests: "الضيوف المؤكدون",
       addGuest: "إضافة ضيف",
       guestName: "اسم الضيف",
       guestNameRequired: "اسم الضيف مطلوب",
