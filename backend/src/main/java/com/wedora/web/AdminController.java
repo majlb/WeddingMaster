@@ -111,6 +111,18 @@ public class AdminController {
         return SupplierResponse.from(supplier);
     }
 
+    @GetMapping("/suppliers")
+    public List<SupplierResponse> suppliers() {
+        return suppliers.findAll().stream().map(SupplierResponse::from).toList();
+    }
+
+    @PatchMapping("/suppliers/{id}/activation")
+    public SupplierResponse toggleSupplierActivation(@PathVariable Long id, @RequestParam boolean active) {
+        Supplier supplier = suppliers.findById(id).orElseThrow(() -> new ApiException.NotFound("Supplier not found"));
+        supplier.setActive(active);
+        return SupplierResponse.from(supplier);
+    }
+
     @GetMapping("/analytics")
     public Map<String, Long> analytics() {
         Map<String, Long> result = new LinkedHashMap<>();

@@ -152,4 +152,12 @@ export const adminApi = {
   archiveCategory: (id) => api.delete(`/admin/categories/${id}`),
   pendingSuppliers: () => api.get("/admin/suppliers/pending"),
   approveSupplier: (id, approved) => api.patch(`/admin/suppliers/${id}/approval`, null, { params: { approved } }),
+  suppliers: () => api.get("/admin/suppliers"),
+  toggleSupplierActive: (id, active) => api.patch(`/admin/suppliers/${id}/activation`, null, { params: { active } }),
+};
+export const guestApi = {
+  list: () => api.get("/guests"),
+  create: (guest) => api.post("/guests", guest),
+  update: (id, guest) => api.put(`/guests/${id}`, guest),
+  delete: (id) => api.delete(`/guests/${id}`),
 };

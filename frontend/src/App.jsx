@@ -9,7 +9,7 @@ import {
   Trash2, Users, Utensils, X,
 } from "lucide-react";
 import {
-  adminApi, assistantApi, authApi, bookingsApi, categoriesApi, checklistApi, collaborationsApi, countriesApi, messagesApi,
+  adminApi, assistantApi, authApi, bookingsApi, categoriesApi, checklistApi, collaborationsApi, countriesApi, guestApi, messagesApi,
   notificationsApi, supplierServicesApi, usersApi,
   paymentsApi, resolveMediaUrl, reviewsApi, suppliersApi, websocketUrl,
 } from "./api.js";
@@ -57,6 +57,7 @@ const customerNavigation = [
   { id: "home", icon: LayoutDashboard },
   { id: "discover", icon: Search },
   { id: "checklist", icon: ListChecks },
+  { id: "guests", icon: Users },
   { id: "bookings", icon: CalendarDays },
   { id: "messages", icon: MessageCircle },
   { id: "saved", icon: Heart },
@@ -64,7 +65,7 @@ const customerNavigation = [
 ];
 
 const workspacePages = {
-  CUSTOMER: ["home", "discover", "checklist", "bookings", "messages", "saved", "collaborations"],
+  CUSTOMER: ["home", "discover", "checklist", "guests", "bookings", "messages", "saved", "collaborations"],
   SUPPLIER: ["supplierDashboard", "discover", "bookings", "messages", "collaborations"],
   ADMIN: ["admin"],
 };
@@ -991,6 +992,8 @@ function App() {
                 ? <p className="workspace-loading">{t("loadingChecklist")}</p>
                 : <div className="checklist-layout"><ChecklistCard tasks={checklistTasks} categories={directoryCategories} progress={progress} currencyCode={account.currencyCode || "USD"} onToggle={toggleTask} onEdit={(task) => { setChecklistEditingTask(task); setChecklistModalOpen(true); }} onRemove={removeChecklistTask} expanded /><aside className="side-tip"><span className="tip-icon"><Sparkles size={18} /></span><h3>{t("oneStepAtTime")}</h3><p>{t("checklistTip")}</p><div className="tip-count">{t("tasksDone", { completed: completedTasks, total: checklistTasks.length })} <span>{progress}%</span></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></aside></div>
           )}
+
+          {activePage === "guests" && account?.role === "CUSTOMER" && <GuestsWorkspace onNotice={setNotice} />}
 
           {activePage === "bookings" && (account?.role === "CUSTOMER" || account?.role === "SUPPLIER") && <div className="bookings-panel"><div className="panel-heading"><div><h2>{account.role === "SUPPLIER" ? t("bookingEnquiries") : t("yourSupplierRequests")}</h2><p>{account.role === "SUPPLIER" ? t("manageBookingRequests") : t("bookingConversationSummary")}</p></div><CalendarDays size={20} /></div>
             {apiBookings !== null ? <div className="booking-list">{apiBookings.map((booking) => <BookingRow key={booking.id} booking={booking} role={account.role} payment={paymentRecords.find((payment) => payment.bookingId === booking.id)} reviewed={reviewedBookingIds.includes(booking.id)} onNotice={setNotice} onDetails={() => setBookingDetails(booking)} onPay={() => setPaymentBookingId(booking.id)} onReview={() => setReviewBooking(booking)} onUpdated={(updated) => setApiBookings((items) => items.map((item) => item.id === updated.id ? updated : item))} onConfirmed={(updated) => {
@@ -2012,6 +2015,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
   const [editingServiceId, setEditingServiceId] = useState(null);
   const [serviceTranslations, setServiceTranslations] = useState(emptyServiceTranslations);
   const [servicePrice, setServicePrice] = useState("");
+  const [servicePricingType, setServicePricingType] = useState("");
   const [serviceCategoryId, setServiceCategoryId] = useState("");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
   const [categoriesSaving, setCategoriesSaving] = useState(false);
@@ -2084,6 +2088,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     }
     setServiceTranslations(translations);
     setServicePrice(service.price ?? "");
+    setServicePricingType(service.pricingType ?? "");
     setServiceCategoryId(String(service.categoryId || ""));
   }, [editingServiceId, serviceOffers]);
 
@@ -2168,6 +2173,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     setEditingServiceId(null);
     setServiceTranslations(emptyServiceTranslations());
     setServicePrice("");
+    setServicePricingType("");
     setServiceCategoryId("");
   }
 
@@ -2182,6 +2188,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     }
     setServiceTranslations(translations);
     setServicePrice(service.price ?? "");
+    setServicePricingType(service.pricingType ?? "");
     setServiceCategoryId(String(service.categoryId || ""));
   }
 
@@ -2195,6 +2202,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
         description: serviceTranslations[code].description.trim(),
       }])),
       price: servicePrice === "" ? null : Number(servicePrice),
+      pricingType: servicePricingType || null,
       categoryId: Number(serviceCategoryId),
     };
     const formData = new FormData();
@@ -2389,7 +2397,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
           const displayDescription = translated?.description || service.description;
           return <article className="service-editor-item" key={service.id}>
             {service.imageUrl && <img src={resolveMediaUrl(service.imageUrl)} alt={displayName || service.name} />}
-            <div><strong>{displayName || service.name}</strong><p>{service.categoryName}</p><p>{displayDescription || service.description}</p></div>
+            <div><strong>{displayName || service.name}</strong><p>{service.categoryName}{service.pricingType ? ` · ${service.pricingType}` : ""}</p><p>{displayDescription || service.description}</p></div>
             <span>{service.price != null ? `${service.currency} ${service.price}` : t("priceOnRequest")}</span>
             <button type="button" className="booking-action" onClick={() => editService(service)}>{t("edit")}</button>
             <button type="button" className="booking-action" onClick={() => deleteService(service.id)}>{t("delete")}</button>
@@ -2450,6 +2458,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
             })}
           </select></label>
           <label>{t("price")}<input type="number" min="0" step="0.01" value={servicePrice} onChange={(event) => setServicePrice(event.target.value)} /></label>
+          <ServicePricingField value={servicePricingType} onChange={setServicePricingType} />
           <label className="wide-field">{t("serviceImage")}<input name="serviceImage" type="file" accept="image/jpeg,image/png,image/webp" /></label>
         </div>
         <div className="service-editor-actions">
@@ -2462,8 +2471,164 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
   </div>;
 }
 
+function GuestsWorkspace({ onNotice }) {
+  const { t } = useTranslation();
+  const [guests, setGuests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingGuest, setEditingGuest] = useState(null);
+  const [formData, setFormData] = useState({ name: "", numberOfPeople: 1, phoneNumber: "", approved: false });
+
+  async function loadGuests() {
+    setLoading(true);
+    try {
+      const { data } = await guestApi.list();
+      setGuests(data);
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorLoadGuests"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadGuests();
+  }, [t, onNotice]);
+
+  function openAddGuest() {
+    setEditingGuest(null);
+    setFormData({ name: "", numberOfPeople: 1, phoneNumber: "", approved: false });
+    setModalOpen(true);
+  }
+
+  function openEditGuest(guest) {
+    setEditingGuest(guest);
+    setFormData({ name: guest.name, numberOfPeople: guest.numberOfPeople, phoneNumber: guest.phoneNumber, approved: guest.approved });
+    setModalOpen(true);
+  }
+
+  async function saveGuest(event) {
+    event.preventDefault();
+    if (!formData.name.trim()) {
+      onNotice(t("guestNameRequired"));
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editingGuest) {
+        await guestApi.update(editingGuest.id, formData);
+        onNotice(t("guestUpdated"));
+      } else {
+        await guestApi.create(formData);
+        onNotice(t("guestAdded"));
+      }
+      setModalOpen(false);
+      loadGuests();
+    } catch (error) {
+      onNotice(error.response?.data?.detail || (editingGuest ? t("errorUpdateGuest") : t("errorAddGuest")));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteGuest(guestId) {
+    if (!window.confirm(t("confirmDeleteGuest"))) return;
+    try {
+      await guestApi.delete(guestId);
+      setGuests((current) => current.filter((g) => g.id !== guestId));
+      onNotice(t("guestDeleted"));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorDeleteGuest"));
+    }
+  }
+
+  if (loading) return <p className="workspace-loading">{t("loadingGuests")}</p>;
+  return <div className="guests-workspace"><div className="panel-heading"><div><h2>{t("guests")}</h2><p>{t("guestsIntro")}</p></div><Users size={20} /></div>
+    <button className="primary-button" onClick={openAddGuest}><span>+</span> {t("addGuest")}</button>
+    {guests.length > 0 ? <div className="guest-list"><table><thead><tr><th>{t("guestName")}</th><th>{t("numberOfPeople")}</th><th>{t("phoneNumber")}</th><th>{t("approved")}</th><th>Actions</th></tr></thead><tbody>{guests.map((guest) => <tr key={guest.id}><td>{guest.name}</td><td>{guest.numberOfPeople}</td><td>{guest.phoneNumber}</td><td>{guest.approved ? "✓" : "—"}</td><td><button className="booking-action" onClick={() => openEditGuest(guest)}>{t("edit")}</button><button className="booking-action" onClick={() => deleteGuest(guest.id)}>{t("delete")}</button></td></tr>)}</tbody></table></div> : <EmptyState title={t("noGuests")} detail={t("startAddingGuests")} action={openAddGuest} actionLabel={t("addGuest")} />}
+    {modalOpen && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalOpen(false)}><section className="booking-modal" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setModalOpen(false)} aria-label={t("closeDialog")}><X size={19} /></button><h2>{editingGuest ? t("editGuest") : t("addGuest")}</h2>
+      <form onSubmit={saveGuest}><input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder={t("guestName")} required /><input type="number" value={formData.numberOfPeople} onChange={(e) => setFormData({ ...formData, numberOfPeople: parseInt(e.target.value) || 1 })} placeholder={t("numberOfPeople")} min="1" required /><input value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} placeholder={t("phoneNumber")} /><label><input type="checkbox" checked={formData.approved} onChange={(e) => setFormData({ ...formData, approved: e.target.checked })} /> {t("approved")}</label><button className="primary-button" disabled={saving}>{saving ? t("saving") : editingGuest ? t("saveChanges") : t("addGuest")}</button></form>
+    </section></div>}
+  </div>;
+}
+
+function SuppliersAdminPanel({ onNotice }) {
+  const { t } = useTranslation();
+  const [suppliers, setSuppliers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+  const [toggling, setToggling] = useState({});
+
+  const filterOptions = [
+    { key: "all", label: t("filterAllSuppliers") },
+    { key: "approved", label: t("filterApproved") },
+    { key: "pending", label: t("filterPending") },
+    { key: "active", label: t("filterActive") },
+    { key: "inactive", label: t("filterInactive") },
+  ];
+
+  async function loadSuppliers() {
+    setLoading(true);
+    try {
+      const { data } = await adminApi.suppliers();
+      setSuppliers(data);
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorLoadSuppliers"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSuppliers();
+  }, [t, onNotice]);
+
+  function filteredSuppliers() {
+    return suppliers.filter((s) => {
+      if (filter === "approved") return s.status === "Approved";
+      if (filter === "pending") return s.status === "Pending";
+      if (filter === "active") return s.active;
+      if (filter === "inactive") return !s.active;
+      return true;
+    });
+  }
+
+  async function toggleSupplierActive(supplierId, currentActive) {
+    const newActive = !currentActive;
+    setToggling((prev) => ({ ...prev, [supplierId]: true }));
+    try {
+      await adminApi.toggleSupplierActive(supplierId, newActive);
+      setSuppliers((current) => current.map((s) => s.id === supplierId ? { ...s, active: newActive } : s));
+      onNotice(newActive ? t("supplierActivated") : t("supplierDeactivated"));
+    } catch (error) {
+      onNotice(error.response?.data?.detail || t("errorToggleSupplier"));
+    } finally {
+      setToggling((prev) => ({ ...prev, [supplierId]: false }));
+    }
+  }
+
+  if (loading) return <p className="workspace-loading">{t("loadingSuppliers")}</p>;
+  const shown = filteredSuppliers();
+  return <section className="admin-panel"><div className="panel-heading"><div><h2>{t("suppliers")}</h2><p>{t("suppliersManagement")}</p></div><BriefcaseBusiness size={19} /></div>
+    <div className="filter-buttons">{filterOptions.map((opt) => <button key={opt.key} className={filter === opt.key ? "active" : ""} onClick={() => setFilter(opt.key)}>{opt.label}</button>)}</div>
+    {shown.length > 0 ? <div className="supplier-list"><table><thead><tr><th>{t("businessName")}</th><th>{t("location")}</th><th>{t("status")}</th><th>{t("active")}</th><th>{t("categories")}</th><th>{t("rating")}</th></tr></thead><tbody>{shown.map((supplier) => <tr key={supplier.id}><td><strong>{supplier.businessName}</strong></td><td>{supplier.location}</td><td><span className="status-pill">{supplier.status}</span></td><td><input type="checkbox" checked={supplier.active} onChange={() => toggleSupplierActive(supplier.id, supplier.active)} disabled={toggling[supplier.id]} /></td><td>{supplier.categories?.map((c) => c.name).join(", ")}</td><td>{supplier.rating || "—"}</td></tr>)}</tbody></table></div> : <p className="admin-empty">{t("noSuppliers")}</p>}
+  </section>;
+}
+
+function ServicePricingField({ value, onChange }) {
+  const { t } = useTranslation();
+  const pricingOptions = [
+    { value: "per_person", label: t("pricingPerPerson") },
+    { value: "per_table", label: t("pricingPerTable") },
+    { value: "all_wedding", label: t("pricingAllWedding") },
+  ];
+  return <fieldset><legend>{t("pricingType")}</legend><select value={value || ""} onChange={(e) => onChange(e.target.value)}><option value="">{t("selectPricingType")}</option>{pricingOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></fieldset>;
+}
+
 function AdminDashboard({ onNotice }) {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState("overview");
   const translationLanguages = [
     { code: "en", label: "English" },
     { code: "fr", label: "French" },
@@ -2553,6 +2718,8 @@ function AdminDashboard({ onNotice }) {
 
   if (loading && !metrics) return <div className="payment-loading">{t("loadingPlatformOverview")}</div>;
   return <div className="admin-dashboard">
+    <div className="admin-tabs"><button className={activeTab === "overview" ? "active" : ""} onClick={() => setActiveTab("overview")}>Overview</button><button className={activeTab === "suppliers" ? "active" : ""} onClick={() => setActiveTab("suppliers")}>{t("suppliers")}</button></div>
+    {activeTab === "overview" && <div>
     <div className="dashboard-metrics">{Object.entries(metrics || {}).map(([key, value]) => <article key={key}><span>{t(`metric_${key}`, { defaultValue: key.replace(/([A-Z])/g, " $1") })}</span><strong>{value}</strong></article>)}</div>
     <section className="admin-panel"><div className="panel-heading"><div><h2>{t("supplierApplications")}</h2><p>{t("reviewBusinesses")}</p></div><ShieldCheck size={19} /></div>
       {pendingSuppliers.length ? pendingSuppliers.map((supplier) => <div className="admin-row" key={supplier.id}><div><strong>{supplier.businessName}</strong><small>{supplier.categoryName} · {supplier.location}</small></div><button className="booking-action" onClick={() => reviewSupplier(supplier.id, false)}>{t("decline")}</button><button className="primary-button" onClick={() => reviewSupplier(supplier.id, true)}>{t("approve")} <Check size={13} /></button></div>) : <p className="admin-empty">{t("noPendingApplications")}</p>}
@@ -2567,6 +2734,8 @@ function AdminDashboard({ onNotice }) {
       </form>
       {categoriesList.map((category) => <div className="admin-row category-admin-row" key={category.id}><div><strong>{category.name}</strong><small>/{category.slug}{category.description ? ` · ${category.description}` : ""}</small></div><span className="status-pill">{category.active ? t("active") : t("archived")}</span><button className="booking-action" onClick={() => setEditingCategory(category)}>{t("editTranslations")}</button>{category.active && <button className="booking-action" onClick={async () => { try { await adminApi.archiveCategory(category.id); setCategoriesList((items) => items.map((item) => item.id === category.id ? { ...item, active: false } : item)); window.dispatchEvent(new Event("wedora:categories-updated")); onNotice(t("categoryArchived")); } catch (error) { onNotice(error.response?.data?.detail || t("errorArchiveCategory")); } }}>{t("archive")}</button>}</div>)}
     </section>
+    </div>}
+    {activeTab === "suppliers" && <SuppliersAdminPanel onNotice={onNotice} />}
     {editingCategory && <CategoryTranslationsModal category={editingCategory} onClose={() => setEditingCategory(null)} onSave={saveCategoryTranslations} />}
   </div>;
 }

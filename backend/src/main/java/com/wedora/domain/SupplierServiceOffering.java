@@ -40,6 +40,10 @@ public class SupplierServiceOffering {
     @Column(precision = 12, scale = 2)
     private BigDecimal price;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private PricingType pricingType;
+
     @Column(length = 500)
     private String imageUrl;
 }
