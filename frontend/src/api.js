@@ -1,5 +1,6 @@
 import axios from "axios";
-
+console.log("=== API.JS LOADED v123 ===");
+alert("API.JS LOADED");
 const apiBaseUrl = "https://weddingmaster.onrender.com/api";/*import.meta.env.VITE_API_URL
   || (import.meta.env.PROD ? "https://weddingmaster.onrender.com/api" : "/api");
 */
