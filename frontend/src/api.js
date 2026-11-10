@@ -8,6 +8,10 @@ export const api = axios.create({
   baseURL: apiBaseUrl,
   timeout: 10000,
 });
+
+
+
+console.log("BASE URL =", api.defaults.baseURL);
 export function resolveMediaUrl(url) {
   if (!url) return "";
   const apiBase = new URL(apiBaseUrl, window.location.origin);
@@ -33,6 +37,7 @@ api.interceptors.request.use((config) => {
     }
  
   config.headers["Accept-Language"] = localStorage.getItem("wedora-language") || "en";
+   console.log("REQUEST URL:", config.baseURL + config.url);
   return config;
 });
 
