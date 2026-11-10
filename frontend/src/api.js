@@ -10,6 +10,8 @@ export const api = axios.create({
 export function resolveMediaUrl(url) {
   if (!url) return "";
   const apiBase = new URL(apiBaseUrl, window.location.origin);
+  console.log("API Base URL:", apiBaseUrl);
+console.log("Axios Base URL:", api.defaults.baseURL);
   return new URL(url, apiBase).toString();
 }
 export const websocketUrl = import.meta.env.VITE_WS_URL
