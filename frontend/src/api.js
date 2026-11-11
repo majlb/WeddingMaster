@@ -1,6 +1,5 @@
 import axios from "axios";
-console.log("=== API.JS LOADED v123 ===");
-alert("API.JS LOADED");
+
 const apiBaseUrl = "https://weddingmaster.onrender.com/api";/*import.meta.env.VITE_API_URL
   || (import.meta.env.PROD ? "https://weddingmaster.onrender.com/api" : "/api");
 */
@@ -11,13 +10,9 @@ export const api = axios.create({
 });
 
 
-
-console.log("BASE URL =", api.defaults.baseURL);
 export function resolveMediaUrl(url) {
   if (!url) return "";
   const apiBase = new URL(apiBaseUrl, window.location.origin);
-  console.log("API Base URL:", apiBaseUrl);
-console.log("Axios Base URL:", api.defaults.baseURL);
   return new URL(url, apiBase).toString();
 }
 export const websocketUrl = import.meta.env.VITE_WS_URL
