@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: weddingmaster-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://weddingmaster.onrender.com/api
+      - key: VITE_WS_URL
+        value: wss://weddingmaster.onrender.com/ws
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
