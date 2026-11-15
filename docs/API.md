@@ -14,6 +14,9 @@ Except for registration/login, public supplier/category reads, health, and the S
 | POST | `/auth/login` | Public | Exchange `{ "username": "name", "password": "..." }` for an auth response including `token`, `id`, `name`, and `username`; legacy accounts may still sign in using their email as the username value |
 | PUT | `/users/me/countries` | Couple | Update the signed-in couple's country preferences |
 | PUT | `/users/me/wedding-date` | Couple | Save or clear the couple's wedding date using `{ "weddingDate": "YYYY-MM-DD" }` (or `null`) |
+| PUT | `/users/me/phone-number` | Authenticated user | Save or clear the user's WhatsApp number using `{ "phoneNumber": "+15551234567" }` (or `null`); numbers must use E.164 format |
+| POST | `/guests/{id}/invitation` | Couple who owns the guest | Send a generated PNG card to the guest with the configured Twilio WhatsApp image template; multipart fields are `card` (PNG, max 5 MB) and `message` (1–1,600 characters) |
+| GET | `/guest-invitations/media/{uuid}` | Public, unguessable temporary link | Serve the card image to Twilio; links expire after 24 hours and are cleaned up |
 | POST | `/assistant/chat` | Couple | Generate a wedding-planning reply using up to 12 alternating `{ "role": "user"|"assistant", "content": "..." }` messages; each message is limited to 1,200 characters |
 | GET | `/notifications` | Authenticated user | Return the 50 newest in-app notifications and the total unread count |
 | PUT | `/notifications/{id}/read` | Authenticated user | Mark one of the user's notifications as read |
@@ -22,6 +25,8 @@ Except for registration/login, public supplier/category reads, health, and the S
 Passwords must be 10–72 characters and are stored using BCrypt. Tokens expire after the configured `JWT_EXPIRATION_MS` (default 24 hours).
 Usernames are 3–30 letters, numbers, periods, underscores, or hyphens. New accounts do not require or publish an email address; existing accounts retain email sign-in.
 The wedding date is included in authentication responses and is stored on the couple's account.
+
+Direct WhatsApp invitation delivery requires `WHATSAPP_ENABLED=true`, the existing Twilio account/sender credentials, `TWILIO_WHATSAPP_INVITATION_CONTENT_SID` set to an approved WhatsApp image-header template, and `PUBLIC_API_URL` set to the API's public HTTPS origin (without a path). Configure the template image URL as `https://<api-origin>/api/guest-invitations/media/{{1}}` and its body to include `{{2}}`; the API supplies the temporary image token and personalized invitation message as those variables. Guests' phone numbers must be in international E.164 format, recipients must have opted in, and WhatsApp template approval and messaging rules apply. Invitation images are stored outside the general public uploads directory and removed after 24 hours.
 
 ## Suppliers and categories
 
@@ -74,7 +79,7 @@ Suppliers can create collaborations with names translated into English, French, 
 
 Couple and supplier registration requests include one or more `countryCodes` values using ISO 3166-1 alpha-2 codes. Couples can update country preferences with `PUT /users/me/countries`; supplier profiles can update the countries they serve with `PUT /suppliers/{id}`. Couple discovery and saved suppliers show only suppliers serving at least one selected country.
 
-The couple-only `POST /api/assistant/chat` endpoint runs inference locally through LangChain4j's Ollama integration; it does not call OpenAI or another external AI provider. Install Ollama on the API host, download a model (for example, `ollama pull llama3.2:3b`), and configure `OLLAMA_BASE_URL` (default `http://localhost:11434`), `OLLAMA_MODEL` (default `llama3.2:3b`), and `OLLAMA_TIMEOUT_SECONDS` (default `180`) for the backend. The API server must be able to reach that Ollama instance. Recent chat messages and up to 25 approved public supplier summaries in the couple's selected countries are passed to that local instance. Conversations are not stored by Wedmaster. Do not include sensitive personal or payment information in assistant messages.
+The couple-only `POST /api/assistant/chat` endpoint uses the backend AI provider configured by `AI_PROVIDER` (`ollama` by default, or `openrouter`). For Ollama, install it on the API host and download a model (for example, `ollama pull llama3.2:3b`); configure `OLLAMA_BASE_URL` (default `http://localhost:11434`), `OLLAMA_MODEL` (default `llama3.2:3b`), and `OLLAMA_TIMEOUT_SECONDS` (default `180`). For OpenRouter, set `AI_PROVIDER=openrouter`, provide `OPENROUTER_API_KEY` only to the backend, and optionally configure `OPENROUTER_MODEL` (default `openai/gpt-4o-mini`), `OPENROUTER_BASE_URL` (default `https://openrouter.ai/api/v1`), and `OPENROUTER_TIMEOUT_SECONDS` (default `60`). Recent chat messages and up to 25 approved public supplier summaries in the couple's selected countries are sent to the configured provider. OpenRouter is external and may process data under its own policies. Conversations are not stored by Wedmaster. Do not include sensitive personal or payment information in assistant messages.
 
 ## Bookings and checklist
 
@@ -103,6 +108,8 @@ Never mark an invoice paid based on client-side state. Payment status is driven 
 The local Vite server proxies `/ws` to the API with WebSocket upgrades enabled. If chat does not connect, confirm the API is running on port 8080, the frontend is opened from `localhost:5173` or `127.0.0.1:5173`, and the account has an active booking with that supplier.
 
 Authenticated customers and suppliers can subscribe to `/user/queue/notifications` for real-time updates. Booking requests, offers, booking status changes, incoming chat messages, and collaboration invitations/acceptances/service additions/activation/selections create persistent in-app notifications for the affected user; the notification center shows unread counts and remains available after reconnecting. Notification responses contain either a `bookingId` or a `collaborationId`, depending on the event.
+
+WhatsApp delivery is optional and disabled by default. To send each notification to the recipient's saved phone number after the notification transaction commits, set `WHATSAPP_ENABLED=true`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, and `TWILIO_WHATSAPP_CONTENT_SID` on the API. The content SID must refer to an approved Twilio WhatsApp template containing `{{1}} {{2}} {{3}}. Open Wedora to view the details.`; the variables are the actor, notification action, and event context. Users may save an E.164 number during registration or update it with `PUT /api/users/me/phone-number`.
 
 Connect STOMP to `/ws`, send the JWT in the STOMP `CONNECT` native `Authorization: Bearer <JWT>` header, and subscribe to `/topic/bookings/{bookingId}`. Send messages to `/app/bookings/{bookingId}` with `{ "body": "…", "attachmentId": 123 }`. Upload a private attachment to `POST /bookings/{id}/attachments` as multipart `file`, then include its returned `id`; download links are participant-protected. JPEG, PNG, WebP, MP4, and PDF files are accepted up to 50 MB. Both chat history (`GET /bookings/{id}/messages`) and WebSocket subscriptions/sends verify that the signed-in account is a participant in that booking.
 

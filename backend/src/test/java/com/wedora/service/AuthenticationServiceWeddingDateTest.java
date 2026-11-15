@@ -11,6 +11,7 @@ import com.wedora.security.JwtService;
 import com.wedora.web.ApiException;
 import com.wedora.web.dto.WeddingDateRequest;
 import com.wedora.web.dto.CurrencyPreferenceRequest;
+import com.wedora.web.dto.PhoneNumberRequest;
 import com.wedora.web.dto.SupplierRegistrationRequest;
 import com.wedora.web.dto.LoginRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,12 +80,27 @@ class AuthenticationServiceWeddingDateTest {
     }
 
     @Test
+    void userCanSaveAndClearWhatsAppPhoneNumber() {
+        when(jwtService.createToken(couple)).thenReturn("couple-token");
+
+        var saved = authenticationService.updatePhoneNumber("couple@example.test",
+                new PhoneNumberRequest("+15551234567"));
+        assertThat(couple.getPhoneNumber()).isEqualTo("+15551234567");
+        assertThat(saved.phoneNumber()).isEqualTo("+15551234567");
+
+        var cleared = authenticationService.updatePhoneNumber("couple@example.test",
+                new PhoneNumberRequest(null));
+        assertThat(couple.getPhoneNumber()).isNull();
+        assertThat(cleared.phoneNumber()).isNull();
+    }
+
+    @Test
     void supplierRegistrationDoesNotRequireOrAssignACategory() {
         when(passwordEncoder.encode("long-enough-password")).thenReturn("encoded");
         when(jwtService.createToken(any(AppUser.class))).thenReturn("supplier-token");
         when(suppliers.save(any(Supplier.class))).thenAnswer(invocation -> invocation.getArgument(0));
         var request = new SupplierRegistrationRequest("Supplier", "supplier_name",
-                "long-enough-password", "Studio", "Paris", null, java.util.List.of("FR", "BE"));
+                "long-enough-password", "Studio", "Paris", null, java.util.List.of("FR", "BE"), null);
 
         var response = authenticationService.registerSupplier(request);
 
@@ -104,7 +120,7 @@ class AuthenticationServiceWeddingDateTest {
     void usernameMustBeUniqueWhenRegistering() {
         when(users.existsByUsernameIgnoreCase("already-used")).thenReturn(true);
         var request = new SupplierRegistrationRequest("Supplier", "already-used",
-                "long-enough-password", "Studio", "Paris", null, java.util.List.of("FR", "BE"));
+                "long-enough-password", "Studio", "Paris", null, java.util.List.of("FR", "BE"), null);
 
         assertThatThrownBy(() -> authenticationService.registerSupplier(request))
                 .isInstanceOf(ApiException.Conflict.class)
@@ -119,7 +135,7 @@ class AuthenticationServiceWeddingDateTest {
         when(jwtService.createToken(any(AppUser.class))).thenReturn("couple-token");
 
         var response = authenticationService.register(new com.wedora.web.dto.RegisterRequest(
-                "New Couple", "new_couple", "long-enough-password", java.util.List.of("FR", "BE")));
+                "New Couple", "new_couple", "long-enough-password", java.util.List.of("FR", "BE"), null));
 
         var savedUser = org.mockito.ArgumentCaptor.forClass(AppUser.class);
         verify(users).save(savedUser.capture());

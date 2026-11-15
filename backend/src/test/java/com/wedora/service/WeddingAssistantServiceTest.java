@@ -50,7 +50,7 @@ class WeddingAssistantServiceTest {
     }
 
     @Test
-    void sendsConversationAndSupplierContextToTheConfiguredLocalModel() {
+    void sendsConversationAndSupplierContextToTheConfiguredModel() {
         when(chatModel.generate(anyList())).thenReturn(Response.from(AiMessage.from("Try a garden venue.")));
 
         String reply = service.reply(couple.getEmail(),
@@ -66,7 +66,7 @@ class WeddingAssistantServiceTest {
     }
 
     @Test
-    void reportsWhenTheLocalModelCannotBeReached() {
+    void reportsWhenTheConfiguredModelCannotBeReached() {
         when(chatModel.generate(anyList())).thenThrow(new IllegalStateException("connection refused"));
 
         assertThatThrownBy(() -> service.reply(couple.getEmail(),
@@ -75,12 +75,12 @@ class WeddingAssistantServiceTest {
                 .satisfies(exception -> {
                     ApiException apiException = (ApiException) exception;
                     assertThat(apiException.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-                    assertThat(apiException.getCode()).isEqualTo("assistant.local_model_unavailable");
+                    assertThat(apiException.getCode()).isEqualTo("assistant.model_unavailable");
                 });
     }
 
     @Test
-    void reportsWhenTheLocalModelTimesOut() {
+    void reportsWhenTheConfiguredModelTimesOut() {
         when(chatModel.generate(anyList())).thenThrow(new RuntimeException(new InterruptedIOException("timeout")));
 
         assertThatThrownBy(() -> service.reply(couple.getEmail(),
@@ -89,7 +89,7 @@ class WeddingAssistantServiceTest {
                 .satisfies(exception -> {
                     ApiException apiException = (ApiException) exception;
                     assertThat(apiException.getStatus()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
-                    assertThat(apiException.getCode()).isEqualTo("assistant.local_model_timeout");
+                    assertThat(apiException.getCode()).isEqualTo("assistant.model_timeout");
                 });
     }
 }

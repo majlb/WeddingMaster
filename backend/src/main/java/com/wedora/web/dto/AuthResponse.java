@@ -5,4 +5,5 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record AuthResponse(String token, Long id, String name, String email, String username, Role role,
-                           List<String> countryCodes, LocalDate weddingDate, String currencyCode) {}
+                           List<String> countryCodes, LocalDate weddingDate, String currencyCode,
+                           String phoneNumber) {}

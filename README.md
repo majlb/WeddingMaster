@@ -4,10 +4,11 @@ Wedmaster is a wedding-planning platform starter with a React/Vite client and a 
 
 ## What is included
 
-- **React:** responsive customer dashboard, supplier discovery and filters, favourites, task checklist with per-item budgets and a total, couple-selectable USD/EUR planning currency (USD by default), AI wedding-planning assistant, booking enquiry modal, customer/supplier account registration and sign-in, supplier profile editor, admin category/approval dashboard, English/French/Greek/Arabic UI, RTL layout, and dark mode.
-- **Spring Boot:** JWT authentication, customer and pending-supplier registration, supplier categories and public profiles, owner profile editing, booking requests and supplier quotes, booking confirmation, checklist synchronization, reviews, media uploads, booking chat and persistent real-time in-app notifications over authenticated STOMP/WebSockets, local Ollama wedding assistant, payment intents/refunds/webhook processing, and admin category/supplier approval endpoints.
+- **React:** responsive customer dashboard, supplier discovery and filters, favourites, task checklist with per-item budgets and a total, couple-selectable USD/EUR planning currency (USD by default), invitation template designer with direct WhatsApp card delivery, AI wedding-planning assistant, booking enquiry modal, customer/supplier account registration and sign-in, supplier profile editor, admin category/approval dashboard, English/French/Greek/Arabic UI, RTL layout, and dark mode.
+- **Spring Boot:** JWT authentication, customer and pending-supplier registration, supplier categories and public profiles, owner profile editing, booking requests and supplier quotes, booking confirmation, checklist synchronization, reviews, media uploads, booking chat and persistent real-time in-app notifications over authenticated STOMP/WebSockets, Twilio WhatsApp invitation-image delivery, configurable Ollama/OpenRouter wedding assistant, payment intents/refunds/webhook processing, and admin category/supplier approval endpoints.
 - **Database:** PostgreSQL schema managed by Flyway. H2 in-memory is configured for local API development.
 - **Email:** optional booking-request, quote, and confirmation messages sent after database commits when `MAIL_ENABLED=true` and SMTP is configured.
+- **WhatsApp:** optional Twilio WhatsApp delivery for in-app notifications when `WHATSAPP_ENABLED=true`; users can add an E.164 phone number during registration or in their account profile.
 - **API reference:** OpenAPI/Swagger UI at `/swagger-ui/index.html` while the API is running.
 - **Deployment:** Docker Compose, production Spring profile, health endpoint, and GitHub Actions CI.
 
@@ -40,8 +41,10 @@ Requirements: Java 17, Maven 3.9+, Node.js 20+, and npm.
    Open `http://localhost:5173`. The dashboard includes sample supplier cards for preview; supplier searches use live API data when approved listings exist. Create a customer account from the profile menu to use authenticated booking and planning APIs.
 
 3. Configure online payments by setting `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` on the API, and set `VITE_STRIPE_PUBLISHABLE_KEY` when building a Stripe-enabled frontend. The backend returns an explicit `503` until its Stripe secret is configured.
+4. Configure WhatsApp notifications with `WHATSAPP_ENABLED=true`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, and `TWILIO_WHATSAPP_CONTENT_SID`. Create and approve a Twilio WhatsApp content template containing `{{1}} {{2}} {{3}}. Open Wedora to view the details.`; the variables are the actor, notification action, and event context.
+5. To deliver invitation cards directly, also set `TWILIO_WHATSAPP_INVITATION_CONTENT_SID` to an approved image-header template and `PUBLIC_API_URL` to the API's public HTTPS origin. The template's image header URL should be `https://<api-origin>/api/guest-invitations/media/{{1}}` and its body should include `{{2}}`. Guests must have opted in and use international E.164 phone numbers. See [the invitation API notes](docs/API.md#authentication) for details.
 
-4. Install [Ollama](https://ollama.com/) on the API host, download a local model, and start its service:
+6. The assistant uses local Ollama by default. Install [Ollama](https://ollama.com/) on the API host, download a local model, and start its service:
 
    ```powershell
    ollama pull llama3.2:3b
@@ -52,7 +55,7 @@ Requirements: Java 17, Maven 3.9+, Node.js 20+, and npm.
    mvn spring-boot:run
    ```
 
-   If `ollama pull` or `ollama list` cannot connect, start the Ollama application/service first (or run `ollama serve` in another terminal). The assistant uses LangChain4j's Ollama integration and does not send prompts to OpenAI or another external AI provider. Configure `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, and `OLLAMA_TIMEOUT_SECONDS` in the API environment as needed; the default model timeout is 180 seconds to accommodate slower local inference. Recent chat messages and up to 25 approved public supplier summaries are processed by that Ollama instance; Wedmaster does not persist assistant conversations.
+   To use OpenRouter instead, set `AI_PROVIDER=openrouter` and inject `OPENROUTER_API_KEY` as a backend process/deployment secret. Do not put the key in frontend `VITE_` variables, `.env`, or source control. The default model is `openai/gpt-4o-mini`; override it with `OPENROUTER_MODEL` if needed. `OPENROUTER_BASE_URL` and `OPENROUTER_TIMEOUT_SECONDS` are also configurable. Recent chat messages and up to 25 approved public supplier summaries are sent to the configured provider; Wedmaster does not persist assistant conversations. OpenRouter is an external service and may process data according to its own policies.
 
 ## Authentication and authorization
 
@@ -66,13 +69,13 @@ Requirements: Java 17, Maven 3.9+, Node.js 20+, and npm.
 
 ## Docker deployment
 
-Copy `.env.example` to `.env`, set a unique `JWT_SECRET` and database password, and configure Stripe, Ollama model, and mail values as needed. Then run:
+Copy `.env.example` to `.env`, set a unique `JWT_SECRET` and database password, and configure Stripe, AI provider/model, and mail values as needed. For OpenRouter, set `AI_PROVIDER=openrouter` and inject `OPENROUTER_API_KEY` from a secret manager or the shell environment used to launch Docker Compose; Compose forwards it only to the backend. Do not store the key in `.env`. Then run:
 
 ```powershell
 docker compose up --build -d
 ```
 
-The first startup downloads the configured model into the Ollama container before starting the API, which can take several minutes. The client is served at `http://localhost:8081`; it proxies `/api`, `/ws`, and `/uploads` to the API. Ollama and its downloaded models run locally in a separate container; no AI provider key is needed. PostgreSQL data, model files, and uploads persist in named volumes. The production API profile validates Flyway-managed schema instead of applying automatic Hibernate updates. Back up these volumes and use a TLS-terminating reverse proxy for public deployments.
+The first startup downloads the configured model into the Ollama container before starting the API, which can take several minutes. The client is served at `http://localhost:8081`; it proxies `/api`, `/ws`, and `/uploads` to the API. With the default `AI_PROVIDER=ollama`, inference stays local and no provider key is needed. With `AI_PROVIDER=openrouter`, chat messages are sent to OpenRouter and its selected model; provide the API key only to the backend. PostgreSQL data, model files, and uploads persist in named volumes. The production API profile validates Flyway-managed schema instead of applying automatic Hibernate updates. Back up these volumes and use a TLS-terminating reverse proxy for public deployments.
 
 ## Render frontend deployment
 

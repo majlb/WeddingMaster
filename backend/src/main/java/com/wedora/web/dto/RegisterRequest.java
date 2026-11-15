@@ -10,5 +10,6 @@ public record RegisterRequest(
         @NotBlank @Size(max = 120) String name,
         @NotBlank @Size(min = 3, max = 30) @Pattern(regexp = "^[a-zA-Z0-9._-]+$") String username,
         @NotBlank @Size(min = 10, max = 72) String password,
-        @NotEmpty List<@Size(min = 2, max = 2) String> countryCodes
+        @NotEmpty List<@Size(min = 2, max = 2) String> countryCodes,
+        @Size(max = 16) @Pattern(regexp = "^\\+[1-9]\\d{7,14}$") String phoneNumber
 ) {}

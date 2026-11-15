@@ -27,6 +27,8 @@ public class AppUser {
     private String username;
     @Column(nullable = false, length = 180)
     private String email;
+    @Column(name = "phone_number", length = 16)
+    private String phoneNumber;
     @Column(nullable = false)
     private String passwordHash;
     @Enumerated(EnumType.STRING)

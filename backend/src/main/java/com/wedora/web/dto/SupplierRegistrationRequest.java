@@ -13,5 +13,6 @@ public record SupplierRegistrationRequest(
         @NotBlank @Size(max = 150) String businessName,
         @NotBlank @Size(max = 180) String location,
         @Size(max = 4000) String description,
-        @NotEmpty List<@Size(min = 2, max = 2) String> countryCodes
+        @NotEmpty List<@Size(min = 2, max = 2) String> countryCodes,
+        @Size(max = 16) @Pattern(regexp = "^\\+[1-9]\\d{7,14}$") String phoneNumber
 ) {}

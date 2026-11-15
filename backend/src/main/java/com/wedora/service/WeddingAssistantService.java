@@ -65,22 +65,22 @@ public class WeddingAssistantService {
             response = chatModel.generate(conversation);
         } catch (RuntimeException exception) {
             if (hasCause(exception, InterruptedIOException.class)) {
-                log.warn("Local Ollama model request timed out", exception);
+                log.warn("Configured assistant model request timed out", exception);
                 throw new ApiException(HttpStatus.GATEWAY_TIMEOUT,
-                        "The local Ollama model did not respond before the configured timeout.",
-                        "assistant.local_model_timeout");
+                        "The configured assistant model did not respond before the configured timeout.",
+                        "assistant.model_timeout");
             }
-            log.warn("Local Ollama model request failed", exception);
+            log.warn("Configured assistant model request failed", exception);
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "The local Ollama model is unavailable. Ensure Ollama is running, the model is downloaded, and the API server can reach it.",
-                    "assistant.local_model_unavailable");
+                    "The configured assistant model is unavailable. Check the provider configuration and API server logs.",
+                    "assistant.model_unavailable");
         }
         AiMessage answer = response == null ? null : response.content();
         String reply = answer == null ? null : answer.text();
         if (reply == null || reply.isBlank()) {
-            log.warn("Local Ollama model returned an empty chat reply");
-            throw new ApiException(HttpStatus.BAD_GATEWAY, "The local assistant model returned an empty response.",
-                    "assistant.local_model_invalid_response");
+            log.warn("Configured assistant model returned an empty chat reply");
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "The assistant model returned an empty response.",
+                    "assistant.model_invalid_response");
         }
         return reply.trim();
     }

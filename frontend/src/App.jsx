@@ -17,6 +17,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { Client } from "@stomp/stompjs";
+import { getCountries, getCountryCallingCode, parsePhoneNumberFromString } from "libphonenumber-js";
 
 const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
@@ -58,6 +59,7 @@ const customerNavigation = [
   { id: "discover", icon: Search },
   { id: "checklist", icon: ListChecks },
   { id: "guests", icon: Users },
+  { id: "invitations", icon: Mail },
   { id: "bookings", icon: CalendarDays },
   { id: "messages", icon: MessageCircle },
   { id: "saved", icon: Heart },
@@ -65,7 +67,7 @@ const customerNavigation = [
 ];
 
 const workspacePages = {
-  CUSTOMER: ["home", "discover", "checklist", "guests", "bookings", "messages", "saved", "collaborations"],
+  CUSTOMER: ["home", "discover", "checklist", "guests", "invitations", "bookings", "messages", "saved", "collaborations"],
   SUPPLIER: ["supplierDashboard", "discover", "bookings", "messages", "collaborations"],
   ADMIN: ["admin"],
 };
@@ -75,6 +77,7 @@ const imageUrl = (id, width = 720) => id?.startsWith("/uploads/")
   : id?.startsWith("http")
     ? id
     : `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=85`;
+const supportedPhoneCountries = getCountries();
 
 function formatSupplierPrice(t, supplier) {
   if (supplier.pricePrefix) return t("priceFrom", { price: supplier.price });
@@ -109,6 +112,136 @@ function readSavedSuppliers(accountId) {
   } catch {
     return [];
   }
+}
+
+function readSavedInvitation(accountId) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`wedora-invitation-${accountId}`) || "null");
+    const validEventDate = !saved?.eventDate
+      || (/^\d{4}-\d{2}-\d{2}$/.test(saved.eventDate)
+        && new Date(`${saved.eventDate}T00:00:00Z`).toISOString().slice(0, 10) === saved.eventDate);
+    return saved && typeof saved === "object"
+      && ["garden", "editorial", "classic"].includes(saved.templateId)
+      && typeof saved.coupleNames === "string"
+      && typeof saved.eventDate === "string"
+      && validEventDate
+      && typeof saved.venue === "string"
+      && typeof saved.message === "string"
+      ? saved
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function drawInvitationText(context, text, x, y, maxWidth, lineHeight, maxLines = Infinity) {
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let line = "";
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && context.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) lines.push(line);
+  const visibleLines = lines.slice(0, maxLines);
+  if (lines.length > maxLines) visibleLines[maxLines - 1] = `${visibleLines[maxLines - 1].replace(/[.…]+$/, "")}…`;
+  visibleLines.forEach((lineText, index) => context.fillText(lineText, x, y + index * lineHeight, maxWidth));
+  return visibleLines.length * lineHeight;
+}
+
+function createInvitationImage(templateId, coupleNames, message, weddingDate, venue, eyebrow, language) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1350;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Invitation canvas is unavailable");
+
+  const palettes = {
+    garden: { background: "#fbf7f0", accent: "#788b77", tint: "#c9a0a1" },
+    editorial: { background: "#f7f2eb", accent: "#775c4b", tint: "#b99068" },
+    classic: { background: "#f6f1e9", accent: "#875d67", tint: "#9a6c74" },
+  };
+  const palette = palettes[templateId] || palettes.garden;
+  context.fillStyle = palette.background;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const glow = context.createRadialGradient(1080, 0, 10, 1080, 0, 620);
+  glow.addColorStop(0, `${palette.tint}35`);
+  glow.addColorStop(1, `${palette.tint}00`);
+  context.fillStyle = glow;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const lowerGlow = context.createRadialGradient(0, 1350, 0, 0, 1350, 580);
+  lowerGlow.addColorStop(0, `${palette.accent}28`);
+  lowerGlow.addColorStop(1, `${palette.accent}00`);
+  context.fillStyle = lowerGlow;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.strokeStyle = `${palette.accent}60`;
+  context.lineWidth = templateId === "classic" ? 3 : 2;
+  context.strokeRect(44, 44, canvas.width - 88, canvas.height - 88);
+  if (templateId === "classic") {
+    context.strokeRect(56, 56, canvas.width - 112, canvas.height - 112);
+  }
+
+  const centerX = canvas.width / 2;
+  context.fillStyle = palette.accent;
+  context.globalAlpha = 0.8;
+  for (let petal = 0; petal < 8; petal += 1) {
+    const angle = (Math.PI * 2 * petal) / 8;
+    context.beginPath();
+    context.ellipse(
+      centerX + Math.cos(angle) * 23,
+      225 + Math.sin(angle) * 23,
+      10,
+      19,
+      angle,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+  context.globalAlpha = 1;
+
+  context.textAlign = "center";
+  context.textBaseline = "alphabetic";
+  context.direction = language === "ar" ? "rtl" : "ltr";
+  context.fillStyle = palette.accent;
+  context.font = "600 21px 'DM Sans', Arial, sans-serif";
+  context.fillText(eyebrow.toLocaleUpperCase(language), centerX, 320, 850);
+
+  context.font = templateId === "editorial"
+    ? "500 76px 'DM Sans', Arial, sans-serif"
+    : templateId === "classic"
+      ? "italic 500 78px Georgia, serif"
+      : "500 82px Georgia, serif";
+  const nameHeight = drawInvitationText(context, coupleNames, centerX, 465, 820, 96, 2);
+
+  context.fillStyle = palette.accent;
+  context.font = "400 30px 'DM Sans', Arial, sans-serif";
+  const messageHeight = drawInvitationText(context, message, centerX, 520 + nameHeight, 720, 45, 6);
+
+  let detailY = 570 + nameHeight + messageHeight;
+  context.font = "600 26px 'DM Sans', Arial, sans-serif";
+  if (weddingDate) {
+    context.fillText(weddingDate, centerX, detailY, 800);
+    detailY += 64;
+  }
+  if (venue) {
+    context.font = "400 25px 'DM Sans', Arial, sans-serif";
+    drawInvitationText(context, venue, centerX, detailY, 760, 36, 2);
+  }
+
+  context.font = "400 27px Georgia, serif";
+  context.fillText("✦", centerX, 1120);
+  const dataUrl = canvas.toDataURL("image/png");
+  const imageData = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+  const imageBytes = Uint8Array.from(imageData, (character) => character.charCodeAt(0));
+  return new Blob([imageBytes], { type: "image/png" });
 }
 
 function readAppearance() {
@@ -650,6 +783,19 @@ function App() {
       return false;
     }
   }
+  async function savePhoneNumber(phoneNumber) {
+    try {
+      const { data } = await usersApi.updatePhoneNumber(phoneNumber || null);
+      localStorage.setItem("wedora-token", data.token);
+      localStorage.setItem("wedora-user", JSON.stringify(data));
+      setAccount(data);
+      setNotice(t("whatsappPhoneSaved"));
+      return true;
+    } catch (error) {
+      setNotice(error.response?.data?.detail || t("errorSavePhoneNumber"));
+      return false;
+    }
+  }
   function openSupplier(supplier) {
     setSelectedSupplier(supplier);
     navigate(`/supplier/${encodeURIComponent(supplier.slug || supplier.id)}`, {
@@ -972,7 +1118,7 @@ function App() {
             />
           )}
 
-          {activePage !== "home" && hasPageAccess && <div className="page-title-row"><div><div className="eyebrow">{account?.role === "CUSTOMER" ? t("weddingYourWay") : roleLabel ? roleLabel.toUpperCase() : t("weddingProfessionals")}</div><h1>{pageTitle}</h1><p>{activePage === "checklist" ? t("checklistIntro") : activePage === "discover" ? t("discoverIntro") : activePage === "collaborations" ? t("collaborationsIntro") : t("pageIntro")}</p></div>
+          {activePage !== "home" && hasPageAccess && <div className="page-title-row"><div><div className="eyebrow">{account?.role === "CUSTOMER" ? t("weddingYourWay") : roleLabel ? roleLabel.toUpperCase() : t("weddingProfessionals")}</div><h1>{pageTitle}</h1><p>{activePage === "checklist" ? t("checklistIntro") : activePage === "discover" ? t("discoverIntro") : activePage === "collaborations" ? t("collaborationsIntro") : activePage === "invitations" ? t("invitationsIntro") : t("pageIntro")}</p></div>
             {activePage === "checklist" && <button className="primary-button" onClick={() => { setChecklistEditingTask(null); setChecklistModalOpen(true); }}><span>+</span> {t("addTask")}</button>}
             {activePage === "discover" && <button className="secondary-button" onClick={() => setNotice(t("showingAllSuppliers"))}><SlidersHorizontal size={16} /> {t("filters")} <span className="filter-dot" /></button>}
           </div>}
@@ -993,7 +1139,8 @@ function App() {
                 : <div className="checklist-layout"><ChecklistCard tasks={checklistTasks} categories={directoryCategories} progress={progress} currencyCode={account.currencyCode || "USD"} onToggle={toggleTask} onEdit={(task) => { setChecklistEditingTask(task); setChecklistModalOpen(true); }} onRemove={removeChecklistTask} expanded /><aside className="side-tip"><span className="tip-icon"><Sparkles size={18} /></span><h3>{t("oneStepAtTime")}</h3><p>{t("checklistTip")}</p><div className="tip-count">{t("tasksDone", { completed: completedTasks, total: checklistTasks.length })} <span>{progress}%</span></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></aside></div>
           )}
 
-          {activePage === "guests" && account?.role === "CUSTOMER" && <GuestsWorkspace onNotice={setNotice} />}
+          {activePage === "guests" && account?.role === "CUSTOMER" && <GuestsWorkspace account={account} countryOptions={countryOptions} onNotice={setNotice} />}
+          {activePage === "invitations" && account?.role === "CUSTOMER" && <InvitationsWorkspace account={account} onNotice={setNotice} onOpenGuests={() => setActivePage("guests")} />}
 
           {activePage === "bookings" && (account?.role === "CUSTOMER" || account?.role === "SUPPLIER") && <div className="bookings-panel"><div className="panel-heading"><div><h2>{account.role === "SUPPLIER" ? t("bookingEnquiries") : t("yourSupplierRequests")}</h2><p>{account.role === "SUPPLIER" ? t("manageBookingRequests") : t("bookingConversationSummary")}</p></div><CalendarDays size={20} /></div>
             {apiBookings !== null ? <div className="booking-list">{apiBookings.map((booking) => <BookingRow key={booking.id} booking={booking} role={account.role} payment={paymentRecords.find((payment) => payment.bookingId === booking.id)} reviewed={reviewedBookingIds.includes(booking.id)} onNotice={setNotice} onDetails={() => setBookingDetails(booking)} onPay={() => setPaymentBookingId(booking.id)} onReview={() => setReviewBooking(booking)} onUpdated={(updated) => setApiBookings((items) => items.map((item) => item.id === updated.id ? updated : item))} onConfirmed={(updated) => {
@@ -1024,7 +1171,7 @@ function App() {
 
       {selectedSupplier && <SupplierModal supplier={selectedSupplier} countryOptions={countryOptions} saved={saved.includes(selectedSupplier.id)} canContact={account?.role === "CUSTOMER"} onSave={toggleSaved} onClose={closeSupplier} onBook={(offering = null, options = []) => setBookingSupplier({ supplier: selectedSupplier, offering, options })} onMessage={() => { setNotice(t("supplierConversationReady", { name: selectedSupplier.name })); closeSupplier(); setActivePage("messages"); }} />}
       {bookingSupplier && <BookingModal supplier={bookingSupplier.supplier} serviceOffering={bookingSupplier.offering} options={bookingSupplier.options} onClose={() => setBookingSupplier(null)} onSubmit={(details) => bookSupplier(bookingSupplier.supplier, details)} />}
-      {authOpen && <AuthModal key={authMode} initialMode={authMode} account={account} countryOptions={countryOptions} countryLoadStatus={countryLoadStatus} onRetryCountries={retryCountryLoad} onClose={() => setAuthOpen(false)} onSignedIn={(user) => {
+      {authOpen && <AuthModal key={authMode} initialMode={authMode} account={account} countryOptions={countryOptions} countryLoadStatus={countryLoadStatus} onRetryCountries={retryCountryLoad} onSavePhoneNumber={savePhoneNumber} onClose={() => setAuthOpen(false)} onSignedIn={(user) => {
         localStorage.setItem("wedora-token", user.token);
         localStorage.setItem("wedora-user", JSON.stringify(user));
         setSaved(user.role === "CUSTOMER" ? readSavedSuppliers(user.id) : []);
@@ -1577,6 +1724,9 @@ function WeddingAssistant() {
       const response = requestError.response;
       const code = response?.data?.code || response?.data?.properties?.code;
       const errorKeys = {
+        "assistant.model_unavailable": "assistantModelUnavailable",
+        "assistant.model_invalid_response": "assistantModelInvalidResponse",
+        "assistant.model_timeout": "assistantRequestTimeout",
         "assistant.local_model_unavailable": "assistantLocalModelUnavailable",
         "assistant.local_model_invalid_response": "assistantLocalModelInvalidResponse",
         "assistant.local_model_timeout": "assistantRequestTimeout",
@@ -1585,8 +1735,8 @@ function WeddingAssistant() {
         401: "assistantSignInAgain",
         403: "assistantCoupleOnly",
         500: "assistantServerError",
-        502: "assistantLocalModelInvalidResponse",
-        503: "assistantLocalModelUnavailable",
+        502: "assistantModelInvalidResponse",
+        503: "assistantModelUnavailable",
         504: "assistantRequestTimeout",
       };
       const requestTimedOut = ["ECONNABORTED", "ETIMEDOUT"].includes(requestError.code);
@@ -2471,14 +2621,32 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
   </div>;
 }
 
-function GuestsWorkspace({ onNotice }) {
-  const { t } = useTranslation();
+function GuestsWorkspace({ account, countryOptions, onNotice }) {
+  const { t, i18n } = useTranslation();
+  const phoneCountries = useMemo(() => {
+    const listedCountries = countryOptions.filter(({ code }) => supportedPhoneCountries.includes(code));
+    return listedCountries.length
+      ? listedCountries
+      : supportedPhoneCountries.map((code) => ({ code, name: code }));
+  }, [countryOptions]);
+  const supportedCountries = supportedPhoneCountries;
+  const preferredCountry = (account.countryCodes || []).find((code) =>
+    phoneCountries.some((country) => country.code === code))
+    || (phoneCountries.some((country) => country.code === "US") ? "US" : phoneCountries[0]?.code)
+    || "US";
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState(null);
+  const [phoneCountry, setPhoneCountry] = useState(preferredCountry);
   const [formData, setFormData] = useState({ name: "", personCount: 1, phone: "", approved: false });
+
+  useEffect(() => {
+    if (!phoneCountries.some((country) => country.code === phoneCountry)) {
+      setPhoneCountry(preferredCountry);
+    }
+  }, [phoneCountries, phoneCountry, preferredCountry]);
 
   async function loadGuests() {
     setLoading(true);
@@ -2498,13 +2666,24 @@ function GuestsWorkspace({ onNotice }) {
 
   function openAddGuest() {
     setEditingGuest(null);
+    setPhoneCountry(preferredCountry);
     setFormData({ name: "", personCount: 1, phone: "", approved: false });
     setModalOpen(true);
   }
 
   function openEditGuest(guest) {
+    const parsedPhone = guest.phone ? parsePhoneNumberFromString(guest.phone) : undefined;
+    const guestCountry = parsedPhone?.country && supportedCountries.includes(parsedPhone.country)
+      ? parsedPhone.country
+      : preferredCountry;
     setEditingGuest(guest);
-    setFormData({ name: guest.name, personCount: guest.personCount, phone: guest.phone, approved: guest.approved });
+    setPhoneCountry(guestCountry);
+    setFormData({
+      name: guest.name,
+      personCount: guest.personCount,
+      phone: parsedPhone?.nationalNumber || String(guest.phone || "").replace(/\D/g, ""),
+      approved: guest.approved,
+    });
     setModalOpen(true);
   }
 
@@ -2514,13 +2693,20 @@ function GuestsWorkspace({ onNotice }) {
       onNotice(t("guestNameRequired"));
       return;
     }
+    const localPhone = formData.phone.trim();
+    const parsedPhone = localPhone ? parsePhoneNumberFromString(localPhone, phoneCountry) : undefined;
+    if (localPhone && (!parsedPhone || !parsedPhone.isPossible())) {
+      onNotice(t("invalidGuestPhone"));
+      return;
+    }
+    const guestData = { ...formData, phone: parsedPhone?.number || null };
     setSaving(true);
     try {
       if (editingGuest) {
-        await guestApi.update(editingGuest.id, formData);
+        await guestApi.update(editingGuest.id, guestData);
         onNotice(t("guestUpdated"));
       } else {
-        await guestApi.create(formData);
+        await guestApi.create(guestData);
         onNotice(t("guestAdded"));
       }
       setModalOpen(false);
@@ -2556,10 +2742,218 @@ function GuestsWorkspace({ onNotice }) {
       <article><span>{t("totalGuests")}</span><strong>{totalGuestCount}</strong></article>
       <article><span>{t("approvedGuests")}</span><strong>{approvedGuestCount} / {totalGuestCount}</strong></article>
     </div>
-    {guests.length > 0 ? <div className="guest-list"><table><thead><tr><th>{t("guestName")}</th><th>{t("numberOfPeople")}</th><th>{t("phoneNumber")}</th><th>{t("approved")}</th><th>Actions</th></tr></thead><tbody>{guests.map((guest) => <tr key={guest.id}><td>{guest.name}</td><td>{guest.personCount}</td><td>{guest.phone}</td><td>{guest.approved ? "✓" : "—"}</td><td><button className="booking-action" onClick={() => openEditGuest(guest)}>{t("edit")}</button><button className="booking-action" onClick={() => deleteGuest(guest.id)}>{t("delete")}</button></td></tr>)}</tbody></table></div> : <EmptyState title={t("noGuests")} detail={t("startAddingGuests")} action={openAddGuest} actionLabel={t("addGuest")} />}
+    {guests.length > 0 ? <div className="guest-list"><table><thead><tr><th>{t("guestName")}</th><th>{t("numberOfPeople")}</th><th>{t("phoneNumber")}</th><th>{t("approved")}</th><th>{t("guestActions")}</th></tr></thead><tbody>{guests.map((guest) => {
+      const parsedPhone = guest.phone ? parsePhoneNumberFromString(guest.phone) : undefined;
+      const phone = parsedPhone?.isPossible() ? parsedPhone.number.replace(/\D/g, "") : "";
+      return <tr key={guest.id}><td>{guest.name}</td><td>{guest.personCount}</td><td>{guest.phone || "—"}</td><td>{guest.approved ? "✓" : "—"}</td><td className="guest-row-actions">
+        {phone
+          ? <a className="booking-action guest-whatsapp-link" href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" aria-label={t("openGuestWhatsApp", { name: guest.name })}><MessageCircle size={14} />{t("whatsapp")}</a>
+          : <button className="booking-action guest-whatsapp-link" type="button" disabled title={t("guestPhoneRequired")}><MessageCircle size={14} />{t("whatsapp")}</button>}
+        <button className="booking-action" onClick={() => openEditGuest(guest)}>{t("edit")}</button>
+        <button className="booking-action" onClick={() => deleteGuest(guest.id)}>{t("delete")}</button>
+      </td></tr>;
+    })}</tbody></table></div> : <EmptyState title={t("noGuests")} detail={t("startAddingGuests")} action={openAddGuest} actionLabel={t("addGuest")} />}
     {modalOpen && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalOpen(false)}><section className="booking-modal" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setModalOpen(false)} aria-label={t("closeDialog")}><X size={19} /></button><h2>{editingGuest ? t("editGuest") : t("addGuest")}</h2>
-      <form onSubmit={saveGuest}><input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder={t("guestName")} required /><input type="number" value={formData.personCount} onChange={(e) => setFormData({ ...formData, personCount: e.target.value === "" ? "" : Number(e.target.value) })} placeholder={t("numberOfPeople")} min="1" required /><input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder={t("phoneNumber")} /><label><input type="checkbox" checked={formData.approved} onChange={(e) => setFormData({ ...formData, approved: e.target.checked })} /> {t("approved")}</label><button className="primary-button" disabled={saving}>{saving ? t("saving") : editingGuest ? t("saveChanges") : t("addGuest")}</button></form>
+      <form className="guest-editor-form" onSubmit={saveGuest}>
+        <input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder={t("guestName")} required />
+        <input type="number" value={formData.personCount} onChange={(e) => setFormData({ ...formData, personCount: e.target.value === "" ? "" : Number(e.target.value) })} placeholder={t("numberOfPeople")} min="1" required />
+        <label className="guest-phone-label">{t("phoneNumber")}<div className="guest-phone-input">
+          <select value={phoneCountry} onChange={(event) => setPhoneCountry(event.target.value)} aria-label={t("countryCallingCode")}>
+            {phoneCountries.map((country) => <option value={country.code} key={country.code}>
+              {localizedCountryName(country.code, i18n.language, countryOptions)} (+{getCountryCallingCode(country.code)})
+            </option>)}
+          </select>
+          <input type="tel" autoComplete="tel-national" value={formData.phone}
+            onChange={(event) => setFormData({ ...formData, phone: event.target.value })}
+            placeholder={t("localPhoneNumber")} />
+        </div></label>
+        <label className="guest-approved-field"><input type="checkbox" checked={formData.approved} onChange={(e) => setFormData({ ...formData, approved: e.target.checked })} /> {t("approved")}</label>
+        <button className="primary-button" disabled={saving}>{saving ? t("saving") : editingGuest ? t("saveChanges") : t("addGuest")}</button>
+      </form>
     </section></div>}
+  </div>;
+}
+
+const invitationTemplates = [
+  { id: "garden", nameKey: "gardenTemplateName", descriptionKey: "gardenTemplateDescription", style: "garden" },
+  { id: "editorial", nameKey: "editorialTemplateName", descriptionKey: "editorialTemplateDescription", style: "editorial" },
+  { id: "classic", nameKey: "classicTemplateName", descriptionKey: "classicTemplateDescription", style: "classic" },
+];
+
+function InvitationsWorkspace({ account, onNotice, onOpenGuests }) {
+  const { t, i18n } = useTranslation();
+  const savedInvitation = useMemo(() => readSavedInvitation(account.id), [account.id]);
+  const [invitation, setInvitation] = useState(() => savedInvitation || {
+    templateId: "garden",
+    coupleNames: account.name || "",
+    eventDate: account.weddingDate || "",
+    venue: "",
+    message: "",
+  });
+  const [isSaved, setIsSaved] = useState(Boolean(savedInvitation));
+  const [guests, setGuests] = useState([]);
+  const [guestsLoading, setGuestsLoading] = useState(true);
+  const [guestsFailed, setGuestsFailed] = useState(false);
+  const [sendingGuestId, setSendingGuestId] = useState(null);
+
+  async function loadGuests() {
+    setGuestsLoading(true);
+    setGuestsFailed(false);
+    try {
+      const { data } = await guestApi.list();
+      setGuests(data);
+    } catch (error) {
+      setGuestsFailed(true);
+      onNotice(error.response?.data?.detail || t("errorLoadGuests"));
+    } finally {
+      setGuestsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadGuests();
+  }, [account.id]);
+
+  const selectedTemplate = invitationTemplates.find(({ id }) => id === invitation.templateId) || invitationTemplates[0];
+  const coupleNames = invitation.coupleNames.trim() || t("yourNames");
+  const weddingDate = invitation.eventDate
+    ? new Intl.DateTimeFormat(i18n.language, { dateStyle: "long", timeZone: "UTC" })
+      .format(new Date(`${invitation.eventDate}T00:00:00Z`))
+    : "";
+  const invitationCopy = (guest) => [
+    t("invitationWhatsAppGreeting", { guestName: guest.name }),
+    invitation.message.trim() || t("defaultInvitationMessage"),
+    t("invitationWhatsAppCoupleLine", { coupleNames }),
+    weddingDate && `${t("weddingDate")}: ${weddingDate}`,
+    invitation.venue.trim() && `${t("invitationVenue")}: ${invitation.venue.trim()}`,
+  ].filter(Boolean).join("\n\n");
+
+  function updateInvitation(field, value) {
+    setInvitation((current) => ({ ...current, [field]: value }));
+    setIsSaved(false);
+  }
+
+  function saveInvitation(event) {
+    event.preventDefault();
+    try {
+      localStorage.setItem(`wedora-invitation-${account.id}`, JSON.stringify(invitation));
+      setIsSaved(true);
+      onNotice(t("invitationSaved"));
+    } catch {
+      onNotice(t("errorSaveInvitation"));
+    }
+  }
+
+  async function sendInvitation(guest) {
+    setSendingGuestId(guest.id);
+    try {
+      const message = invitation.message.trim() || t("defaultInvitationMessage");
+      const venue = invitation.venue.trim();
+      const image = createInvitationImage(
+        invitation.templateId,
+        coupleNames,
+        message,
+        weddingDate,
+        venue,
+        t("invitationCardEyebrow"),
+        i18n.language,
+      );
+      const filename = `wedding-invitation-${guest.name.trim().replace(/[^\p{L}\p{N}-]+/gu, "-") || guest.id}.png`;
+      const shareText = invitationCopy(guest);
+      const formData = new FormData();
+      formData.append("card", new File([image], filename, { type: "image/png" }));
+      formData.append("message", shareText);
+      await guestApi.sendInvitation(guest.id, formData);
+      onNotice(t("invitationSent", { guestName: guest.name }));
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        onNotice(error.response?.data?.detail || t("errorSendInvitation"));
+      }
+    } finally {
+      setSendingGuestId(null);
+    }
+  }
+
+  return <div className="invitations-workspace">
+    <section className="invitation-builder">
+      <div className="invitation-builder-main">
+        <div className="invitation-section-heading">
+          <div><span className="invitation-section-kicker">{t("invitationStepOne")}</span><h2>{t("invitationTemplatesHeading")}</h2><p>{t("invitationTemplatesIntro")}</p></div>
+          <Sparkles size={20} aria-hidden="true" />
+        </div>
+        <div className="invitation-template-grid">
+          {invitationTemplates.map((template) => <button
+            type="button"
+            key={template.id}
+            className={`invitation-template-option${invitation.templateId === template.id ? " selected" : ""}`}
+            aria-pressed={invitation.templateId === template.id}
+            onClick={() => updateInvitation("templateId", template.id)}>
+            <InvitationCardPreview template={template} invitation={invitation} coupleNames={coupleNames} weddingDate={weddingDate} t={t} compact />
+            <span className="invitation-template-info"><span><strong>{t(template.nameKey)}</strong><small>{t(template.descriptionKey)}</small></span><i>{invitation.templateId === template.id ? <CheckCircle2 size={18} /> : <ChevronRight size={17} />}</i></span>
+          </button>)}
+        </div>
+
+        <form className="invitation-details-form" onSubmit={saveInvitation}>
+          <div className="invitation-section-heading">
+            <div><span className="invitation-section-kicker">{t("invitationStepTwo")}</span><h2>{t("invitationDetailsHeading")}</h2><p>{t("invitationDetailsIntro")}</p></div>
+            <Pencil size={18} aria-hidden="true" />
+          </div>
+          <div className="invitation-fields">
+            <label>{t("coupleNames")}
+              <input value={invitation.coupleNames} onChange={(event) => updateInvitation("coupleNames", event.target.value)} placeholder={t("coupleNamesPlaceholder")} maxLength={100} required />
+            </label>
+            <label>{t("weddingDate")}
+              <input type="date" value={invitation.eventDate} onChange={(event) => updateInvitation("eventDate", event.target.value)} />
+            </label>
+            <label className="invitation-wide-field">{t("invitationVenue")}
+              <input value={invitation.venue} onChange={(event) => updateInvitation("venue", event.target.value)} placeholder={t("invitationVenuePlaceholder")} maxLength={150} />
+            </label>
+            <label className="invitation-wide-field">{t("invitationMessage")}
+              <textarea value={invitation.message} onChange={(event) => updateInvitation("message", event.target.value)} placeholder={t("invitationMessagePlaceholder")} rows="3" maxLength={500} />
+            </label>
+          </div>
+          <button className="primary-button invitation-save-button" type="submit"><Check size={16} />{isSaved ? t("invitationSavedLabel") : t("saveInvitation")}</button>
+        </form>
+      </div>
+
+      <aside className="invitation-preview-panel">
+        <div className="invitation-preview-heading"><div><span className="invitation-section-kicker">{t("invitationLivePreview")}</span><h2>{t("invitationPreview")}</h2></div><span className="invitation-preview-dot" /></div>
+        <InvitationCardPreview template={selectedTemplate} invitation={invitation} coupleNames={coupleNames} weddingDate={weddingDate} t={t} />
+        {!isSaved && <p className="invitation-unsaved-note">{t("invitationUnsaved")}</p>}
+      </aside>
+    </section>
+
+    <section className="invitation-send-panel">
+      <div className="invitation-send-heading"><div><span className="invitation-section-kicker">{t("invitationStepThree")}</span><h2>{t("sendInvitationsHeading")}</h2><p>{t("sendInvitationsIntro")}</p></div><div className="invitation-guest-total"><Users size={17} />{guests.length}</div></div>
+      {guestsLoading ? <p className="workspace-loading">{t("loadingGuests")}</p> : guestsFailed
+        ? <div className="invitation-guests-empty"><p>{t("invitationGuestsFailed")}</p><button className="secondary-button" onClick={loadGuests}>{t("invitationRetry")}</button></div>
+        : guests.length ? <div className="invitation-guest-list">{guests.map((guest) => {
+          const phone = String(guest.phone || "").replace(/[^\d]/g, "");
+          return <div className="invitation-guest-row" key={guest.id}>
+            <span className="invitation-guest-avatar">{guest.name.slice(0, 1).toUpperCase()}</span>
+            <span className="invitation-guest-meta"><strong>{guest.name}</strong><small>{guest.phone || t("guestNoPhone")}</small></span>
+            <button className={`invitation-send-button${!guest.phone || !isSaved || sendingGuestId !== null ? " disabled" : ""}`}
+              type="button" disabled={!guest.phone || !isSaved || sendingGuestId !== null}
+              title={!guest.phone ? t("guestNoPhone") : !isSaved ? t("saveInvitationFirst") : undefined}
+              onClick={() => sendInvitation(guest)}>
+              <Send size={14} />{sendingGuestId === guest.id ? t("preparingInvitation") : t("sendViaWhatsApp")}
+            </button>
+          </div>;
+        })}</div>
+        : <div className="invitation-guests-empty"><Users size={22} /><p>{t("noGuestsToInvite")}</p><button className="secondary-button" onClick={onOpenGuests}>{t("addGuests")}</button></div>}
+    </section>
+  </div>;
+}
+
+function InvitationCardPreview({ template, invitation, coupleNames, weddingDate, t, compact = false }) {
+  return <div className={`invitation-card-preview invitation-style-${template.style}${compact ? " compact" : ""}`}>
+    <div className="invitation-card-ornament" aria-hidden="true"><Flower2 size={compact ? 17 : 23} strokeWidth={1.2} /></div>
+    <span className="invitation-card-eyebrow">{t("invitationCardEyebrow")}</span>
+    <strong className="invitation-card-names">{coupleNames}</strong>
+    <span className="invitation-card-message">{invitation.message.trim() || t("defaultInvitationMessage")}</span>
+    <span className="invitation-card-date">{weddingDate || t("invitationDatePlaceholder")}</span>
+    {invitation.venue.trim() && <span className="invitation-card-venue">{invitation.venue.trim()}</span>}
+    <span className="invitation-card-flourish" aria-hidden="true">✦</span>
   </div>;
 }
 
@@ -3202,6 +3596,7 @@ function AuthModal({
   countryOptions,
   countryLoadStatus,
   onRetryCountries,
+  onSavePhoneNumber,
   onClose,
   onSignedIn,
   onSignOut,
@@ -3212,12 +3607,19 @@ function AuthModal({
   const [username, setUsername] = useState("");
   const [loginIdentifier, setLoginIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [location, setLocation] = useState("");
   const [countryCodes, setCountryCodes] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
   const [usernameStatus, setUsernameStatus] = useState("idle");
+
+  useEffect(() => {
+    setPhoneNumber(account?.phoneNumber || "");
+  }, [account?.phoneNumber]);
 
   useEffect(() => {
     if (mode === "login") {
@@ -3269,8 +3671,8 @@ function AuthModal({
       const { data } = mode === "login"
         ? await authApi.login({ username: loginIdentifier, password })
         : mode === "supplier"
-          ? await authApi.registerSupplier({ name, username, password, businessName, location, countryCodes })
-          : await authApi.register({ name, username, password, countryCodes });
+          ? await authApi.registerSupplier({ name, username, password, businessName, location, countryCodes, phoneNumber: phoneNumber.trim() || null })
+          : await authApi.register({ name, username, password, countryCodes, phoneNumber: phoneNumber.trim() || null });
       onSignedIn(data);
     } catch (requestError) {
       const response = requestError.response;
@@ -3286,12 +3688,36 @@ function AuthModal({
     }
   }
 
+  async function savePhoneNumber(event) {
+    event.preventDefault();
+    setSavingPhone(true);
+    setPhoneError("");
+    try {
+      if (await onSavePhoneNumber(phoneNumber.trim())) setPhoneError("");
+      else setPhoneError(t("errorSavePhoneNumber"));
+    } finally {
+      setSavingPhone(false);
+    }
+  }
+
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="booking-modal auth-modal" role="dialog" aria-modal="true" aria-label={t("yourWedoraAccount")}>
       <button className="modal-close" onClick={onClose} aria-label={t("closeDialog")}><X size={19} /></button>
       {account ? <>
         <div className="eyebrow">{t("yourWedoraAccount")}</div><h2>{t("lovelyToSeeYou", { name: account.name })}</h2>
         <p>{t("signedInPrivate", { username: account.username || account.email })}</p>
+        <form onSubmit={savePhoneNumber}>
+          <label>{t("phoneNumber")} <span className="optional">({t("optional")})</span>
+            <input type="tel" autoComplete="tel" placeholder="+15551234567" value={phoneNumber}
+              onChange={(event) => setPhoneNumber(event.target.value)} maxLength={16}
+              pattern="\+[1-9][0-9]{7,14}" />
+          </label>
+          <p>{t("whatsappPhoneHint")}</p>
+          {phoneError && <p className="auth-error" role="alert">{phoneError}</p>}
+          <button className="primary-button submit-booking" type="submit" disabled={savingPhone}>
+            {savingPhone ? t("saving") : t("savePhoneNumber")}
+          </button>
+        </form>
         <button className="secondary-button" onClick={onSignOut}>{t("signOut")}</button>
       </> : <>
         <div className="booking-modal-icon"><Heart size={20} /></div><div className="eyebrow">{t("littlePlaceForPlans")}</div>
@@ -3308,6 +3734,12 @@ function AuthModal({
               {usernameStatus !== "idle" && <p className={usernameStatus === "available" ? "username-availability available" : "username-availability"} role="status">{t(`usernameStatus_${usernameStatus}`)}</p>}
             </>}
           <label>{t("password")}<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} required maxLength={72} /></label>
+          {mode !== "login" && <label>{t("phoneNumber")} <span className="optional">({t("optional")})</span>
+            <input type="tel" autoComplete="tel" placeholder="+15551234567" value={phoneNumber}
+              onChange={(event) => setPhoneNumber(event.target.value)} maxLength={16}
+              pattern="\+[1-9][0-9]{7,14}" />
+          </label>}
+          {mode !== "login" && <p>{t("whatsappPhoneHint")}</p>}
           {mode === "supplier" && <>
             <label>{t("businessName")}<input value={businessName} onChange={(event) => setBusinessName(event.target.value)} required maxLength={150} /></label>
             <label>{t("businessLocation")}<input value={location} onChange={(event) => setLocation(event.target.value)} required maxLength={180} /></label>

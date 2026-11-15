@@ -35,6 +35,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(HttpMethod.PUT, "/api/users/me/countries",
                                 "/api/users/me/wedding-date", "/api/users/me/currency").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.POST, "/api/guests/*/invitation").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.GET, "/api/guest-invitations/media/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/collaborations/public").hasRole("CUSTOMER")
                         .requestMatchers(HttpMethod.POST, "/api/collaborations/*/select").hasRole("CUSTOMER")
                         .requestMatchers(HttpMethod.DELETE, "/api/collaborations/*/select").hasRole("CUSTOMER")

@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -26,12 +27,15 @@ public class UserNotificationService {
     private final UserNotificationRepository notifications;
     private final UserRepository users;
     private final ObjectProvider<SimpMessagingTemplate> messagingTemplate;
+    private final WhatsAppNotificationService whatsAppNotifications;
 
     public UserNotificationService(UserNotificationRepository notifications, UserRepository users,
-                                   ObjectProvider<SimpMessagingTemplate> messagingTemplate) {
+                                   ObjectProvider<SimpMessagingTemplate> messagingTemplate,
+                                   WhatsAppNotificationService whatsAppNotifications) {
         this.notifications = notifications;
         this.users = users;
         this.messagingTemplate = messagingTemplate;
+        this.whatsAppNotifications = whatsAppNotifications;
     }
 
     public void notify(AppUser recipient, Booking booking, String type, String actorName) {
@@ -53,6 +57,8 @@ public class UserNotificationService {
         UserNotification saved = notifications.save(notification);
         UserNotificationResponse response = UserNotificationResponse.from(saved);
         String recipientEmail = recipient.getEmail();
+        String recipientPhone = recipient.getPhoneNumber();
+        LocalDate eventDate = booking == null ? null : booking.getEventDate();
         Runnable delivery = () -> {
             try {
                 messagingTemplate.getObject().convertAndSendToUser(
@@ -60,6 +66,7 @@ public class UserNotificationService {
             } catch (RuntimeException exception) {
                 logger.error("In-app notification delivery failed for notification {}", saved.getId(), exception);
             }
+            whatsAppNotifications.sendNotification(recipientPhone, type, actorName, eventDate);
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

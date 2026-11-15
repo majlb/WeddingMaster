@@ -16,6 +16,7 @@ import com.wedora.web.dto.RegisterRequest;
 import com.wedora.web.dto.SupplierRegistrationRequest;
 import com.wedora.web.dto.CountryPreferenceRequest;
 import com.wedora.web.dto.CurrencyPreferenceRequest;
+import com.wedora.web.dto.PhoneNumberRequest;
 import com.wedora.web.dto.WeddingDateRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -52,6 +53,7 @@ public class AuthenticationService {
         user.setEmail(internalEmailForUsername(user.getUsername()));
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(Role.CUSTOMER);
+        user.setPhoneNumber(request.phoneNumber());
         user.setCountryCodes(CountryCodes.normalize(request.countryCodes()));
         users.save(user);
         seedChecklist(user);
@@ -67,6 +69,7 @@ public class AuthenticationService {
         user.setEmail(internalEmailForUsername(user.getUsername()));
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setRole(Role.SUPPLIER);
+        user.setPhoneNumber(request.phoneNumber());
         users.save(user);
 
         Supplier supplier = new Supplier();
@@ -135,6 +138,14 @@ public class AuthenticationService {
         return response(user);
     }
 
+    @Transactional
+    public AuthResponse updatePhoneNumber(String email, PhoneNumberRequest request) {
+        AppUser user = users.findByEmailIgnoreCase(normalizeEmail(email))
+                .orElseThrow(() -> new ApiException.Unauthorized("Account not found"));
+        user.setPhoneNumber(request.phoneNumber());
+        return response(user);
+    }
+
     private void ensureUsernameAvailable(String username) {
         if (!usernameAvailable(username)) {
             throw new ApiException.Conflict("That username is already taken");
@@ -145,7 +156,8 @@ public class AuthenticationService {
         String accountEmail = user.getEmail().endsWith("@account.wedmaster.invalid") ? null : user.getEmail();
         return new AuthResponse(jwtService.createToken(user), user.getId(), user.getName(), accountEmail,
                 user.getUsername(), user.getRole(), user.getCountryCodes(), user.getWeddingDate(),
-                user.getCurrencyCode() == null ? CurrencyCode.USD.name() : user.getCurrencyCode().name());
+                user.getCurrencyCode() == null ? CurrencyCode.USD.name() : user.getCurrencyCode().name(),
+                user.getPhoneNumber());
     }
 
     private String internalEmailForUsername(String username) {

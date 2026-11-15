@@ -38,11 +38,16 @@ services:
       DATABASE_USERNAME: ${DATABASE_USERNAME:?Set DATABASE_USERNAME in .env}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-180}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-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}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-60}
       MAIL_HOST: ${MAIL_HOST:-localhost}
       MAIL_PORT: ${MAIL_PORT:-1025}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
@@ -51,12 +56,21 @@ services:
       MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
       MAIL_FROM: ${MAIL_FROM:-notifications@wedora.local}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      TWILIO_WHATSAPP_CONTENT_SID: ${TWILIO_WHATSAPP_CONTENT_SID:-}
+      TWILIO_WHATSAPP_INVITATION_CONTENT_SID: ${TWILIO_WHATSAPP_INVITATION_CONTENT_SID:-}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8081}
       UPLOADS_DIR: /app/uploads
       CHAT_UPLOADS_DIR: /app/chat-uploads
+      INVITATION_UPLOADS_DIR: /app/invitation-uploads
     volumes:
       - wedora-uploads:/app/uploads
       - wedora-chat-uploads:/app/chat-uploads
+      - wedora-invitation-uploads:/app/invitation-uploads
     depends_on:
       db:
         condition: service_healthy
@@ -73,7 +87,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: https://weddingmaster.onrender.com/api
+        VITE_API_URL: http://localhost:8080/api
         VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
     ports:
       - "8081:80"
@@ -86,3 +100,4 @@ volumes:
   wedora-ollama:
   wedora-uploads:
   wedora-chat-uploads:
+  wedora-invitation-uploads:

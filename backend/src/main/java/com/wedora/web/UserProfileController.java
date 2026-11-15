@@ -4,6 +4,7 @@ import com.wedora.service.AuthenticationService;
 import com.wedora.web.dto.AuthResponse;
 import com.wedora.web.dto.CountryPreferenceRequest;
 import com.wedora.web.dto.CurrencyPreferenceRequest;
+import com.wedora.web.dto.PhoneNumberRequest;
 import com.wedora.web.dto.WeddingDateRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -37,5 +38,11 @@ public class UserProfileController {
     public AuthResponse updateCurrency(@AuthenticationPrincipal String email,
                                        @Valid @RequestBody CurrencyPreferenceRequest request) {
         return authenticationService.updateCurrency(email, request);
+    }
+
+    @PutMapping("/phone-number")
+    public AuthResponse updatePhoneNumber(@AuthenticationPrincipal String email,
+                                          @Valid @RequestBody PhoneNumberRequest request) {
+        return authenticationService.updatePhoneNumber(email, request);
     }
 }
