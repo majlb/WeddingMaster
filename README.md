@@ -44,18 +44,21 @@ Requirements: Java 17, Maven 3.9+, Node.js 20+, and npm.
 4. Configure WhatsApp notifications with `WHATSAPP_ENABLED=true`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, and `TWILIO_WHATSAPP_CONTENT_SID`. Create and approve a Twilio WhatsApp content template containing `{{1}} {{2}} {{3}}. Open Wedora to view the details.`; the variables are the actor, notification action, and event context.
 5. To deliver invitation cards directly, also set `TWILIO_WHATSAPP_INVITATION_CONTENT_SID` to an approved image-header template and `PUBLIC_API_URL` to the API's public HTTPS origin. The template's image header URL should be `https://<api-origin>/api/guest-invitations/media/{{1}}` and its body should include `{{2}}`. Guests must have opted in and use international E.164 phone numbers. See [the invitation API notes](docs/API.md#authentication) for details.
 
-6. The assistant uses local Ollama by default. Install [Ollama](https://ollama.com/) on the API host, download a local model, and start its service:
+6. To use local Ollama for the assistant, install [Ollama](https://ollama.com/) on the API host, download a local model, and start its service:
 
    ```powershell
    ollama pull llama3.2:3b
    ollama list
+   $env:AI_PROVIDER = "ollama"
    $env:OLLAMA_BASE_URL = "http://localhost:11434"
    $env:OLLAMA_MODEL = "llama3.2:3b"
    $env:OLLAMA_TIMEOUT_SECONDS = "180"
    mvn spring-boot:run
    ```
 
-   To use OpenRouter instead, set `AI_PROVIDER=openrouter` and inject `OPENROUTER_API_KEY` as a backend process/deployment secret. Do not put the key in frontend `VITE_` variables, `.env`, or source control. The default model is `openai/gpt-4o-mini`; override it with `OPENROUTER_MODEL` if needed. `OPENROUTER_BASE_URL` and `OPENROUTER_TIMEOUT_SECONDS` are also configurable. Recent chat messages and up to 25 approved public supplier summaries are sent to the configured provider; Wedmaster does not persist assistant conversations. OpenRouter is an external service and may process data according to its own policies.
+   The backend defaults to OpenRouter. Set `AI_PROVIDER=openrouter` and inject `OPENROUTER_API_KEY` as a backend process/deployment secret. Do not put the key in frontend `VITE_` variables, `.env`, or source control. The default model is `openai/gpt-4o-mini`; override it with `OPENROUTER_MODEL` if needed. `OPENROUTER_BASE_URL` and `OPENROUTER_TIMEOUT_SECONDS` are also configurable. Recent chat messages and up to 25 approved public supplier summaries are sent to the configured provider; Wedmaster does not persist assistant conversations. OpenRouter is an external service and may process data according to its own policies.
+
+   For Render, add `AI_PROVIDER`, `OPENROUTER_API_KEY`, and optionally `OPENROUTER_MODEL` in the **backend web service** environment, then redeploy. `render.yaml` configures only the frontend, and Docker Compose settings do not automatically apply to a separate Render service. Use an OpenRouter key, not an OpenAI key. If chat returns 503, inspect the backend log for `Configured assistant model request failed`; a provider HTTP status of 401/403 indicates credentials or access, 402 indicates credits, and 429 indicates rate limiting. The logged status is the provider's status, not the application's generic 503. Check the key, OpenRouter balance, model access, or provider availability as appropriate. Never share keys or chat contents in logs or support requests.
 
 ## Authentication and authorization
 
@@ -75,7 +78,7 @@ Copy `.env.example` to `.env`, set a unique `JWT_SECRET` and database password, 
 docker compose up --build -d
 ```
 
-The first startup downloads the configured model into the Ollama container before starting the API, which can take several minutes. The client is served at `http://localhost:8081`; it proxies `/api`, `/ws`, and `/uploads` to the API. With the default `AI_PROVIDER=ollama`, inference stays local and no provider key is needed. With `AI_PROVIDER=openrouter`, chat messages are sent to OpenRouter and its selected model; provide the API key only to the backend. PostgreSQL data, model files, and uploads persist in named volumes. The production API profile validates Flyway-managed schema instead of applying automatic Hibernate updates. Back up these volumes and use a TLS-terminating reverse proxy for public deployments.
+The first startup downloads the configured model into the Ollama container before starting the API, which can take several minutes, even when OpenRouter is selected. The client is served at `http://localhost:8081`; it proxies `/api`, `/ws`, and `/uploads` to the API. With `AI_PROVIDER=ollama`, inference stays local and no provider key is needed. With `AI_PROVIDER=openrouter` (the Compose default), chat messages are sent to OpenRouter and its selected model; provide the API key only to the backend. PostgreSQL data, model files, and uploads persist in named volumes. The production API profile validates Flyway-managed schema instead of applying automatic Hibernate updates. Back up these volumes and use a TLS-terminating reverse proxy for public deployments.
 
 ## Render frontend deployment
 

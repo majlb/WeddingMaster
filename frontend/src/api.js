@@ -109,6 +109,7 @@ export const usersApi = {
   updateCountries: (countryCodes) => api.put("/users/me/countries", { countryCodes }),
   updateWeddingDate: (weddingDate) => api.put("/users/me/wedding-date", { weddingDate }),
   updateCurrency: (currencyCode) => api.put("/users/me/currency", { currencyCode }),
+  updatePhoneNumber: (phoneNumber) => api.put("/users/me/phone-number", { phoneNumber }),
 };
 export const assistantApi = {
   chat: (messages) => api.post("/assistant/chat", { messages }, { timeout: 195000 }),
@@ -164,4 +165,5 @@ export const guestApi = {
   create: (guest) => api.post("/guests", guest),
   update: (id, guest) => api.put(`/guests/${id}`, guest),
   delete: (id) => api.delete(`/guests/${id}`),
+  sendInvitation: (id, formData) => api.post(`/guests/${id}/invitation`, formData, { timeout: 30000 }),
 };

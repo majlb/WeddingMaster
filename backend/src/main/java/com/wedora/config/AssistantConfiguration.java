@@ -34,7 +34,7 @@ public class AssistantConfiguration {
             case "openrouter" -> {
                 if (openRouterApiKey.isBlank()) {
                     throw new IllegalStateException(
-                            "OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter change");
+                            "OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter");
                 }
                 yield OpenAiChatModel.builder()
                         .baseUrl(openRouterBaseUrl)

@@ -6,6 +6,7 @@ import com.wedora.repository.SupplierRepository;
 import com.wedora.repository.UserRepository;
 import com.wedora.web.ApiException;
 import com.wedora.web.dto.AssistantChatRequest;
+import dev.ai4j.openai4j.OpenAiHttpException;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -15,6 +16,8 @@ import dev.langchain4j.data.message.AiMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -90,6 +93,25 @@ class WeddingAssistantServiceTest {
                     ApiException apiException = (ApiException) exception;
                     assertThat(apiException.getStatus()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
                     assertThat(apiException.getCode()).isEqualTo("assistant.model_timeout");
+                });
+    }
+
+    @ParameterizedTest
+    @CsvSource({"401,assistant.provider_auth", "403,assistant.provider_auth",
+            "402,assistant.provider_credit", "429,assistant.provider_rate_limit",
+            "404,assistant.model_unavailable", "503,assistant.model_unavailable"})
+    void reportsProviderFailuresWithoutLeakingProviderResponse(int providerStatus, String expectedCode) {
+        when(chatModel.generate(anyList())).thenThrow(new RuntimeException(
+                new OpenAiHttpException(providerStatus, "sensitive provider response")));
+
+        assertThatThrownBy(() -> service.reply(couple.getEmail(),
+                List.of(new AssistantChatRequest.Message("user", "Hello")), Locale.ENGLISH))
+                .isInstanceOf(ApiException.class)
+                .satisfies(exception -> {
+                    ApiException apiException = (ApiException) exception;
+                    assertThat(apiException.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+                    assertThat(apiException.getCode()).isEqualTo(expectedCode);
+                    assertThat(apiException.getMessage()).doesNotContain("sensitive provider response");
                 });
     }
 }

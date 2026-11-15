@@ -2,6 +2,7 @@ package com.wedora.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.ai4j.openai4j.OpenAiHttpException;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -65,12 +66,35 @@ public class WeddingAssistantService {
             response = chatModel.generate(conversation);
         } catch (RuntimeException exception) {
             if (hasCause(exception, InterruptedIOException.class)) {
-                log.warn("Configured assistant model request timed out", exception);
+                log.warn("Configured assistant model request timed out ({})", exception.getClass().getSimpleName());
                 throw new ApiException(HttpStatus.GATEWAY_TIMEOUT,
                         "The configured assistant model did not respond before the configured timeout.",
                         "assistant.model_timeout");
             }
-            log.warn("Configured assistant model request failed", exception);
+            OpenAiHttpException providerError = findProviderError(exception);
+            if (providerError != null) {
+                int status = providerError.code();
+                log.warn("Configured assistant model request failed: provider HTTP status {}", status);
+                if (status == 401 || status == 403) {
+                    throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                            "The assistant provider rejected its credentials or access.",
+                            "assistant.provider_auth");
+                }
+                if (status == 402) {
+                    throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                            "The assistant provider requires available credits.",
+                            "assistant.provider_credit");
+                }
+                if (status == 429) {
+                    throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                            "The assistant provider is rate limited.",
+                            "assistant.provider_rate_limit");
+                }
+            } else {
+                Throwable cause = exception;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                log.warn("Configured assistant model request failed: exception type {}", cause.getClass().getName());
+            }
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
                     "The configured assistant model is unavailable. Check the provider configuration and API server logs.",
                     "assistant.model_unavailable");
@@ -90,6 +114,13 @@ public class WeddingAssistantService {
             if (causeType.isInstance(cause)) return true;
         }
         return false;
+    }
+
+    private OpenAiHttpException findProviderError(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof OpenAiHttpException providerError) return providerError;
+        }
+        return null;
     }
 
     private String systemPrompt(AppUser user, Locale locale) {
