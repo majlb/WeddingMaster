@@ -56,7 +56,7 @@ app:
     openrouter:
       base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
       model: ${OPENROUTER_MODEL:openai/gpt-4o-mini}
-      api-key: ${OPENROUTER_API_KEY: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}
+      api-key: ${OPENROUTER_API_KEY}
       timeout-seconds: ${OPENROUTER_TIMEOUT_SECONDS:60}
   mail:
     enabled: ${MAIL_ENABLED:false}
