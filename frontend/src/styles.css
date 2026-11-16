@@ -196,6 +196,12 @@
 .supplier-availability-manager li{display:flex;align-items:center;justify-content:space-between;font-size:9px}
 .supplier-availability-manager p{margin:0;color:#918880;font-size:9px}
 .supplier-service-card-body>.secondary-button{margin-top:9px;width:100%;justify-content:center}
+.service-pricing-select{position:relative;display:block}
+.service-pricing-select select{width:100%;min-height:40px;appearance:none;border:1px solid var(--palette-border,#eadfe0);border-radius:9px;padding:11px 38px 11px 12px;background:#fff;color:var(--ink);font:inherit;cursor:pointer}
+.service-pricing-select svg{position:absolute;inset-inline-end:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--palette-primary,#98615d)}
+[dir="rtl"] .service-pricing-select select{padding:11px 12px 11px 38px}
+.dark .service-pricing-select select{background:#302d29;border-color:#48413b;color:#eee7e0}
+.dark .service-pricing-select svg{color:#e4b0a7}
 .selected-option-label{border-radius:7px;background:#faf3ef;padding:9px;font-size:10px}
 .availability-calendar{display:grid;gap:10px;margin:12px 0}
 .availability-calendar-heading{display:flex;align-items:center;justify-content:space-between}

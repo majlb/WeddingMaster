@@ -108,8 +108,8 @@ public class SupplierServiceOfferingService {
     public SupplierServiceResponse create(Long supplierId, String email,
                                           SupplierServiceRequest request, MultipartFile image) {
         Supplier supplier = suppliers.requireOwned(supplierId, email);
-        validate(request);
         SupplierServiceOffering offering = new SupplierServiceOffering();
+        validate(request, offering);
         offering.setSupplier(supplier);
         offering.setCategory(requireAssignedCategory(supplier, request.categoryId()));
         applyRequest(offering, request);
@@ -125,7 +125,7 @@ public class SupplierServiceOfferingService {
         Supplier supplier = suppliers.requireOwned(supplierId, email);
         SupplierServiceOffering offering = services.findByIdAndSupplierId(serviceId, supplierId)
                 .orElseThrow(() -> new ApiException.NotFound("Service not found"));
-        validate(request);
+        validate(request, offering);
         offering.setCategory(requireAssignedCategory(supplier, request.categoryId()));
         applyRequest(offering, request);
         if (image != null && !image.isEmpty()) {
@@ -173,7 +173,7 @@ public class SupplierServiceOfferingService {
         return offering;
     }
 
-    private void validate(SupplierServiceRequest request) {
+    private void validate(SupplierServiceRequest request, SupplierServiceOffering offering) {
         if (request == null || request.categoryId() == null || request.translations() == null
                 || request.translations().size() != SUPPORTED_LANGUAGES.size()
                 || !request.translations().keySet().containsAll(SUPPORTED_LANGUAGES)) {
@@ -194,6 +194,12 @@ public class SupplierServiceOfferingService {
         }
         if (request.price() != null && request.price().signum() < 0) {
             throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Service price cannot be negative");
+        }
+        int minimum = request.minimumAmount() == null ? offering.getMinimumAmount() : request.minimumAmount();
+        int maximum = request.maximumAmount() == null ? offering.getMaximumAmount() : request.maximumAmount();
+        if (minimum < 1 || maximum < minimum) {
+            throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Service quantities must be positive and the maximum must be at least the minimum");
         }
     }
 
@@ -219,5 +225,8 @@ public class SupplierServiceOfferingService {
         offering.setDescription(english.description() == null ? "" : english.description().trim());
         offering.setLocalizedContent(localizedContent);
         offering.setPrice(request.price());
+        offering.setPricingType(request.pricingType());
+        if (request.minimumAmount() != null) offering.setMinimumAmount(request.minimumAmount());
+        if (request.maximumAmount() != null) offering.setMaximumAmount(request.maximumAmount());
     }
 }

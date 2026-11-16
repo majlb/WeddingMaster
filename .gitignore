@@ -1,6 +1,7 @@
 .env
 .env.*
-.class
+*.class
 !.env.example
 node_modules/
-dist/
+**/dist/
+**/target/

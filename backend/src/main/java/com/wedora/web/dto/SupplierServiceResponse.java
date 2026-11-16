@@ -1,6 +1,7 @@
 package com.wedora.web.dto;
 
 import com.wedora.domain.SupplierServiceOffering;
+import com.wedora.domain.PricingType;
 import com.wedora.domain.TranslationSupport;
 import org.springframework.context.i18n.LocaleContextHolder;
 
@@ -12,6 +13,9 @@ public record SupplierServiceResponse(
         String name,
         String description,
         BigDecimal price,
+        PricingType pricingType,
+        int minimumAmount,
+        int maximumAmount,
         String currency,
         String imageUrl,
         Map<String, Map<String, String>> localizedContent,
@@ -26,6 +30,9 @@ public record SupplierServiceResponse(
                 TranslationSupport.value(service.getLocalizedContent(), language, "name", service.getName()),
                 TranslationSupport.value(service.getLocalizedContent(), language, "description", service.getDescription()),
                 service.getPrice(),
+                service.getPricingType(),
+                service.getMinimumAmount(),
+                service.getMaximumAmount(),
                 service.getSupplier().getCurrency(),
                 service.getImageUrl(),
                 service.getLocalizedContent(),

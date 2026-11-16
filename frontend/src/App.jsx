@@ -23,6 +23,12 @@ const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
   : null;
 
+const pricingTypeLabels = {
+  PERSON: "pricingPerPerson",
+  TABLE: "pricingPerTable",
+  WEDDING: "pricingAllWedding",
+};
+
 function localDateString(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -2169,6 +2175,8 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
   const [serviceTranslations, setServiceTranslations] = useState(emptyServiceTranslations);
   const [servicePrice, setServicePrice] = useState("");
   const [servicePricingType, setServicePricingType] = useState("");
+  const [serviceMinimumAmount, setServiceMinimumAmount] = useState(1);
+  const [serviceMaximumAmount, setServiceMaximumAmount] = useState(1);
   const [serviceCategoryId, setServiceCategoryId] = useState("");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
   const [categoriesSaving, setCategoriesSaving] = useState(false);
@@ -2242,6 +2250,8 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     setServiceTranslations(translations);
     setServicePrice(service.price ?? "");
     setServicePricingType(service.pricingType ?? "");
+    setServiceMinimumAmount(service.minimumAmount ?? 1);
+    setServiceMaximumAmount(service.maximumAmount ?? 1);
     setServiceCategoryId(String(service.categoryId || ""));
   }, [editingServiceId, serviceOffers]);
 
@@ -2327,6 +2337,8 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     setServiceTranslations(emptyServiceTranslations());
     setServicePrice("");
     setServicePricingType("");
+    setServiceMinimumAmount(1);
+    setServiceMaximumAmount(1);
     setServiceCategoryId("");
   }
 
@@ -2342,6 +2354,8 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     setServiceTranslations(translations);
     setServicePrice(service.price ?? "");
     setServicePricingType(service.pricingType ?? "");
+    setServiceMinimumAmount(service.minimumAmount ?? 1);
+    setServiceMaximumAmount(service.maximumAmount ?? 1);
     setServiceCategoryId(String(service.categoryId || ""));
   }
 
@@ -2356,6 +2370,8 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
       }])),
       price: servicePrice === "" ? null : Number(servicePrice),
       pricingType: servicePricingType || null,
+      minimumAmount: Number(serviceMinimumAmount),
+      maximumAmount: Number(serviceMaximumAmount),
       categoryId: Number(serviceCategoryId),
     };
     const formData = new FormData();
@@ -2550,7 +2566,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
           const displayDescription = translated?.description || service.description;
           return <article className="service-editor-item" key={service.id}>
             {service.imageUrl && <img src={resolveMediaUrl(service.imageUrl)} alt={displayName || service.name} />}
-            <div><strong>{displayName || service.name}</strong><p>{service.categoryName}{service.pricingType ? ` · ${service.pricingType}` : ""}</p><p>{displayDescription || service.description}</p></div>
+            <div><strong>{displayName || service.name}</strong><p>{service.categoryName}{pricingTypeLabels[service.pricingType] ? ` · ${t(pricingTypeLabels[service.pricingType])}` : ""}</p><p>{t("serviceQuantityRange", { min: service.minimumAmount, max: service.maximumAmount })}</p><p>{displayDescription || service.description}</p></div>
             <span>{service.price != null ? `${service.currency} ${service.price}` : t("priceOnRequest")}</span>
             <button type="button" className="booking-action" onClick={() => editService(service)}>{t("edit")}</button>
             <button type="button" className="booking-action" onClick={() => deleteService(service.id)}>{t("delete")}</button>
@@ -2612,6 +2628,8 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
           </select></label>
           <label>{t("price")}<input type="number" min="0" step="0.01" value={servicePrice} onChange={(event) => setServicePrice(event.target.value)} /></label>
           <ServicePricingField value={servicePricingType} onChange={setServicePricingType} />
+          <label>{t("minimumQuantity")}<input type="number" min="1" max="2147483647" step="1" required value={serviceMinimumAmount} onChange={(event) => setServiceMinimumAmount(event.target.value)} /></label>
+          <label>{t("maximumQuantity")}<input type="number" min={Math.max(1, Number(serviceMinimumAmount) || 1)} max="2147483647" step="1" required value={serviceMaximumAmount} onChange={(event) => setServiceMaximumAmount(event.target.value)} /></label>
           <label className="wide-field">{t("serviceImage")}<input name="serviceImage" type="file" accept="image/jpeg,image/png,image/webp" /></label>
         </div>
         <div className="service-editor-actions">
@@ -3025,12 +3043,13 @@ function SuppliersAdminPanel({ onNotice }) {
 
 function ServicePricingField({ value, onChange }) {
   const { t } = useTranslation();
-  const pricingOptions = [
-    { value: "per_person", label: t("pricingPerPerson") },
-    { value: "per_table", label: t("pricingPerTable") },
-    { value: "all_wedding", label: t("pricingAllWedding") },
-  ];
-  return <fieldset><legend>{t("pricingType")}</legend><select value={value || ""} onChange={(e) => onChange(e.target.value)}><option value="">{t("selectPricingType")}</option>{pricingOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></fieldset>;
+  return <label>{t("pricingType")}<span className="service-pricing-select">
+    <select value={value || ""} onChange={(event) => onChange(event.target.value)}>
+      <option value="">{t("selectPricingType")}</option>
+      {Object.entries(pricingTypeLabels).map(([type, label]) => <option key={type} value={type}>{t(label)}</option>)}
+    </select>
+    <ChevronDown size={16} aria-hidden="true" />
+  </span></label>;
 }
 
 function AdminDashboard({ onNotice }) {
@@ -3459,6 +3478,8 @@ function SupplierModal({ supplier, countryOptions, saved, canContact, onSave, on
                       {service.categoryName && <small>{service.categoryName}</small>}
                       {service.description && <p>{service.description}</p>}
                       <strong>{service.price != null ? `${service.currency} ${service.price}` : t("priceOnRequest")}</strong>
+                      {pricingTypeLabels[service.pricingType] && <p>{t(pricingTypeLabels[service.pricingType])}</p>}
+                      <p>{t("serviceQuantityRange", { min: service.minimumAmount, max: service.maximumAmount })}</p>
                       {canContact && <button className="secondary-button" onClick={() => onBook(service)}>{t("requestThisService")}</button>}
                     </div>
                   </article>

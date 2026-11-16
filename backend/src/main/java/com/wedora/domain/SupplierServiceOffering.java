@@ -44,6 +44,12 @@ public class SupplierServiceOffering {
     @Column(length = 20)
     private PricingType pricingType;
 
+    @Column(nullable = false)
+    private int minimumAmount = 1;
+
+    @Column(nullable = false)
+    private int maximumAmount = 1;
+
     @Column(length = 500)
     private String imageUrl;
 }
