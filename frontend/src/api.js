@@ -63,6 +63,7 @@ export const supplierServicesApi = {
   ownedAvailability: (supplierId, serviceId, from, to) => api.get(
     `/suppliers/me/${supplierId}/services/${serviceId}/availability`, { params: { from, to } },
   ),
+  ownedBookings: (supplierId) => api.get(`/suppliers/me/${supplierId}/service-bookings`),
   blockDate: (supplierId, serviceId, date) => api.post(
     `/suppliers/me/${supplierId}/services/${serviceId}/availability`, { date },
   ),

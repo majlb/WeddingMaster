@@ -128,19 +128,6 @@ public class BookingService {
         if (booking.getStatus() != BookingStatus.REQUESTED) {
             throw new ApiException.Conflict("Only requested bookings can be accepted");
         }
-        if (booking.getServiceOffering() != null) {
-            SupplierServiceOffering offering = offerings.findByIdForUpdate(booking.getServiceOffering().getId())
-                    .orElseThrow(() -> new ApiException.Conflict("This supplier service is no longer available"));
-            if (availabilityBlocks.existsByServiceOfferingIdAndBlockedDate(
-                    offering.getId(), booking.getEventDate())) {
-                throw new ApiException.Conflict("This service has already been booked or blocked for that date");
-            }
-            SupplierAvailabilityBlock reservation = new SupplierAvailabilityBlock();
-            reservation.setServiceOffering(offering);
-            reservation.setBlockedDate(booking.getEventDate());
-            reservation.setBooking(booking);
-            availabilityBlocks.save(reservation);
-        }
         booking.setStatus(BookingStatus.ACCEPTED);
         updateChecklist(booking, "Supplier accepted", "Awaiting supplier quote");
         notifications.supplierAccepted(booking);
@@ -158,24 +145,6 @@ public class BookingService {
         if (booking.getStatus() != BookingStatus.QUOTED) {
             throw new ApiException.Conflict("Only a quoted booking can be confirmed");
         }
-        if (booking.getServiceOffering() != null) {
-            SupplierServiceOffering offering = offerings.findByIdForUpdate(booking.getServiceOffering().getId())
-                    .orElseThrow(() -> new ApiException.Conflict("This supplier service is no longer available"));
-            var reservation = availabilityBlocks.findByServiceOfferingIdAndBlockedDate(
-                    offering.getId(), booking.getEventDate());
-            if (reservation.isPresent()) {
-                if (reservation.get().getBooking() == null
-                        || !reservation.get().getBooking().getId().equals(booking.getId())) {
-                    throw new ApiException.Conflict("This service has already been booked or blocked for that date");
-                }
-            } else {
-                SupplierAvailabilityBlock newReservation = new SupplierAvailabilityBlock();
-                newReservation.setServiceOffering(offering);
-                newReservation.setBlockedDate(booking.getEventDate());
-                newReservation.setBooking(booking);
-                availabilityBlocks.save(newReservation);
-            }
-        }
         booking.setStatus(BookingStatus.CONFIRMED);
         updateChecklist(booking, "Booking confirmed", "Payment due");
         notifications.bookingConfirmed(booking);
@@ -191,15 +160,6 @@ public class BookingService {
         if (booking.getStatus() != BookingStatus.REQUESTED && booking.getStatus() != BookingStatus.ACCEPTED
                 && booking.getStatus() != BookingStatus.QUOTED) {
             throw new ApiException.Conflict("This booking can no longer be declined");
-        }
-        if (booking.getServiceOffering() != null) {
-            offerings.findByIdForUpdate(booking.getServiceOffering().getId())
-                    .orElseThrow(() -> new ApiException.Conflict("This supplier service is no longer available"));
-            availabilityBlocks.findByServiceOfferingIdAndBlockedDate(
-                    booking.getServiceOffering().getId(), booking.getEventDate())
-                    .filter(block -> block.getBooking() != null
-                            && block.getBooking().getId().equals(booking.getId()))
-                    .ifPresent(availabilityBlocks::delete);
         }
         booking.setStatus(BookingStatus.DECLINED);
         updateChecklist(booking, "Supplier declined", "No payment due");

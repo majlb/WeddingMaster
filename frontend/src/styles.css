@@ -223,6 +223,18 @@
 .supplier-availability-grid .availability-day.unavailable{background:#f2e7e5;border-color:#d6b8b2;color:#8e5551}
 .supplier-availability-grid .availability-day.booked{background:#eadfda;border-color:#c8aaa0;color:#68534b;text-decoration:line-through}
 .supplier-availability-manager>p{line-height:1.5}
+.service-editor-item{flex-wrap:wrap}
+.service-editor-item>.service-bookings,.service-editor-item>.supplier-availability-manager{flex:0 0 100%;min-width:0}
+.service-bookings{display:grid;gap:8px;padding:12px;border:1px solid var(--palette-border,#eee5e6);border-radius:10px;background:#fcfaf8}
+.service-bookings h4{margin:0;font-size:12px}
+.service-bookings>p,.service-bookings>div>p{margin:0;white-space:normal}
+.service-bookings ul{display:grid;gap:8px;list-style:none;padding:0;margin:0}
+.service-bookings li{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--palette-border,#eee5e6);padding-top:8px}
+.service-booking-details{display:grid;gap:4px;font-size:10px}
+.service-booking-warning{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:#8a541d;font-size:10px}
+.service-booking-warning span{white-space:normal}
+.dark .service-bookings{background:#302832;border-color:#493b48}
+.dark .service-booking-warning{color:#f3c98d}
 
 /* A warmer, more celebratory visual system shared by the public site and workspaces. */
 :root{

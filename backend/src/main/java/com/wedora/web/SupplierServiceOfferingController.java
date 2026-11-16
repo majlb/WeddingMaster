@@ -5,6 +5,7 @@ import com.wedora.web.dto.SupplierServiceRequest;
 import com.wedora.web.dto.SupplierServiceResponse;
 import com.wedora.web.dto.AvailabilityDateResponse;
 import com.wedora.web.dto.AvailabilityBlockRequest;
+import com.wedora.web.dto.ServiceBookingResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +32,12 @@ public class SupplierServiceOfferingController {
     public List<SupplierServiceResponse> listOwned(@PathVariable Long supplierId,
                                                     @AuthenticationPrincipal String email) {
         return service.listOwned(supplierId, email);
+    }
+
+    @GetMapping("/me/{supplierId}/service-bookings")
+    public List<ServiceBookingResponse> serviceBookings(@PathVariable Long supplierId,
+                                                         @AuthenticationPrincipal String email) {
+        return service.listOwnedBookings(supplierId, email);
     }
 
     @GetMapping("/{supplierId}/services/{serviceId}/availability")

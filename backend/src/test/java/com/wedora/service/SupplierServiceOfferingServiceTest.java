@@ -2,8 +2,12 @@ package com.wedora.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wedora.domain.Category;
+import com.wedora.domain.AppUser;
+import com.wedora.domain.Booking;
+import com.wedora.domain.BookingStatus;
 import com.wedora.domain.PricingType;
 import com.wedora.domain.Supplier;
+import com.wedora.domain.SupplierAvailabilityBlock;
 import com.wedora.domain.SupplierServiceOffering;
 import com.wedora.repository.BookingRepository;
 import com.wedora.repository.SupplierAvailabilityBlockRepository;
@@ -24,6 +28,7 @@ import org.springframework.jdbc.datasource.init.ScriptUtils;
 import java.math.BigDecimal;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -156,6 +161,91 @@ class SupplierServiceOfferingServiceTest {
             assertThatThrownBy(() -> statement.execute("UPDATE supplier_services SET minimum_amount = 2 WHERE id = 1"))
                     .isInstanceOf(SQLException.class);
         }
+    }
+
+    @Test
+    void ownedBookingsIncludeAllStatusesAndMatchBlocksByServiceAndDate() {
+        when(suppliers.requireOwned(1L, "owner@example.test")).thenReturn(supplier);
+        var date = LocalDate.now().plusDays(30);
+        var first = offering(3L);
+        var second = offering(4L);
+        var blocked = new SupplierAvailabilityBlock();
+        blocked.setServiceOffering(first);
+        blocked.setBlockedDate(date);
+        when(blocks.findByServiceOfferingSupplierId(1L)).thenReturn(List.of(blocked));
+        when(bookings.findBySupplierId(1L)).thenReturn(List.of(
+                booking(11L, first, date, BookingStatus.REQUESTED),
+                booking(12L, first, date, BookingStatus.CONFIRMED),
+                booking(13L, second, date, BookingStatus.QUOTED),
+                booking(14L, first, date.plusDays(1), BookingStatus.DECLINED),
+                booking(15L, null, date, BookingStatus.REQUESTED)));
+
+        var result = service.listOwnedBookings(1L, "owner@example.test");
+        assertThat(result).hasSize(4);
+        assertThat(result).extracting("dateBlocked").containsExactly(true, true, false, false);
+        assertThat(result.get(0).customerName()).isEqualTo("A Couple");
+        assertThat(result.get(3).status()).isEqualTo(BookingStatus.DECLINED);
+    }
+
+    @Test
+    void bookingListRequiresOwnershipBeforeReadingData() {
+        when(suppliers.requireOwned(1L, "other@example.test")).thenThrow(new ApiException.Forbidden("Not yours"));
+        assertThatThrownBy(() -> service.listOwnedBookings(1L, "other@example.test"))
+                .isInstanceOf(ApiException.Forbidden.class);
+        verify(bookings, never()).findBySupplierId(any());
+        verify(blocks, never()).findByServiceOfferingSupplierId(any());
+    }
+
+    @Test
+    void supplierCanBlockAndUnblockADateWithBookings() {
+        when(suppliers.requireOwned(1L, "owner@example.test")).thenReturn(supplier);
+        var offering = offering(3L);
+        var date = LocalDate.now().plusDays(1);
+        when(offerings.findByIdForUpdate(3L)).thenReturn(Optional.of(offering));
+        var saved = service.blockDate(1L, 3L, "owner@example.test", date);
+        assertThat(saved.status()).isEqualTo("BLOCKED");
+        var block = new SupplierAvailabilityBlock();
+        block.setServiceOffering(offering);
+        block.setBlockedDate(date);
+        when(blocks.findByServiceOfferingIdAndBlockedDate(3L, date)).thenReturn(Optional.of(block));
+        service.unblockDate(1L, 3L, "owner@example.test", date);
+        verify(blocks).delete(block);
+    }
+
+    @Test
+    void migrationRemovesOnlyBookingCreatedBlocks() throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:h2:mem:manual_availability");
+             var statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE supplier_availability_blocks (id BIGINT, booking_id BIGINT)");
+            statement.execute("INSERT INTO supplier_availability_blocks VALUES (1, 42), (2, NULL)");
+            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V22__manual_service_availability.sql"));
+            try (var rows = statement.executeQuery("SELECT id FROM supplier_availability_blocks")) {
+                assertThat(rows.next()).isTrue();
+                assertThat(rows.getLong(1)).isEqualTo(2);
+                assertThat(rows.next()).isFalse();
+            }
+        }
+    }
+
+    private SupplierServiceOffering offering(Long id) {
+        var offering = new SupplierServiceOffering();
+        offering.setId(id);
+        offering.setSupplier(supplier);
+        offering.setCategory(category);
+        return offering;
+    }
+
+    private Booking booking(Long id, SupplierServiceOffering offering, LocalDate date, BookingStatus status) {
+        var customer = new AppUser();
+        customer.setName("A Couple");
+        var booking = new Booking();
+        booking.setId(id);
+        booking.setSupplier(supplier);
+        booking.setCustomer(customer);
+        booking.setServiceOffering(offering);
+        booking.setEventDate(date);
+        booking.setStatus(status);
+        return booking;
     }
 
     private SupplierServiceRequest request(PricingType type, Integer minimum, Integer maximum) {

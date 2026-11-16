@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface SupplierAvailabilityBlockRepository extends JpaRepository<SupplierAvailabilityBlock, Long> {
+    List<SupplierAvailabilityBlock> findByServiceOfferingSupplierId(Long supplierId);
     List<SupplierAvailabilityBlock> findByServiceOfferingIdAndBlockedDateBetweenOrderByBlockedDateAsc(
             Long serviceOfferingId, LocalDate from, LocalDate to);
 

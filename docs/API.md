@@ -49,12 +49,14 @@ Direct WhatsApp invitation delivery requires `WHATSAPP_ENABLED=true`, the existi
 | POST | `/suppliers/{id}/services` | Owning supplier | Multipart service (`service` JSON part with `categoryId`, `translations` for `en`, `fr`, `el`, and `ar`, optional `price`; optional `image`) |
 | PUT | `/suppliers/{id}/services/{serviceId}` | Owning supplier | Update the category, all language translations, and optionally replace its image |
 | DELETE | `/suppliers/{id}/services/{serviceId}` | Owning supplier | Delete an offering that has no booking history |
-| GET | `/suppliers/{id}/services/{serviceId}/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | Public | List blocked and booked full-day dates for an approved supplier option (maximum 12-month range) |
-| GET | `/suppliers/me/{id}/services/{serviceId}/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | Owning supplier | List the supplier option's blocked and booked dates |
+| GET | `/suppliers/{id}/services/{serviceId}/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | Public | List manually blocked full-day dates for an approved supplier option (maximum 12-month range) |
+| GET | `/suppliers/me/{id}/services/{serviceId}/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | Owning supplier | List the supplier option's blocked dates |
+| GET | `/suppliers/me/{id}/service-bookings` | Owning supplier | List all service bookings with customer name, date, status, service ID and `dateBlocked` |
 | POST | `/suppliers/me/{id}/services/{serviceId}/availability` | Owning supplier | Block a date using `{ "date": "YYYY-MM-DD" }` |
-| DELETE | `/suppliers/me/{id}/services/{serviceId}/availability/{date}` | Owning supplier | Remove a manual date block; confirmed reservations cannot be removed |
+| DELETE | `/suppliers/me/{id}/services/{serviceId}/availability/{date}` | Owning supplier | Remove a manual date block |
 
 Supplier discovery accepts category slug, partial location, maximum starting price, and minimum rating. Suppliers choose one or more work categories in the dashboard, then assign each service to one selected category. Each service has its own all-day date availability calendar. Suppliers choose a precise location by placing or dragging a pin on the map in their business profile; coordinates are stored as `latitude` and `longitude` and shown on the public supplier page. Map tiles are provided by OpenStreetMap.
+Service bookings never automatically block a date. Suppliers can block or unblock dates manually, including dates with existing bookings. The dashboard warns for active bookings whose date is not blocked; multiple bookings can exist for the same date. Blocks prevent new requests but do not prevent accepting or confirming requests already received. The manual-availability migration removes existing booking-created blocks while preserving manually created blocks.
 An administrator can approve a supplier only after at least one work category has been selected.
 
 Category names/descriptions, supplier business-profile text, and individual service names/descriptions support English, French, Greek, and Arabic translations. API responses select the requested language from the `Accept-Language` header and fall back to the English value when a supplier translation is not available. Admin category create/update requests include a `translations` object keyed by language (`en`, `fr`, `el`, `ar`), each with translated `name` and `description`; supplier profile updates accept `localizedContent` keyed by language with `businessName`, `location`, `description`, `services`, and `availability`. Service create/update requests include a `translations` object with a `name` and optional `description` for each of the four languages. Couple-written booking notes, checklist labels, reviews, and chat messages remain in the language they were entered.
@@ -85,8 +87,8 @@ The couple-only `POST /api/assistant/chat` endpoint uses the backend AI provider
 
 ## Bookings and checklist
 
-1. A customer sends `POST /bookings` with `{ "supplierId", "serviceOfferingId", "eventDate", "notes" }`; `serviceOfferingId` is optional for legacy/general enquiries. A linked checklist task is created as pending. The selected option must belong to the requested supplier and its date must not already be blocked or booked.
-2. The owning supplier can accept a request with `POST /bookings/{id}/accept`, decline it with `POST /bookings/{id}/decline`, or send an offer using `POST /bookings/{id}/quote` with `{ "amountCents", "currency" }`. Accepting an option-specific request reserves that option's date immediately; an accepted request can still be quoted later. Declining releases the reservation.
+1. A customer sends `POST /bookings` with `{ "supplierId", "serviceOfferingId", "eventDate", "notes" }`; `serviceOfferingId` is optional for legacy/general enquiries. A linked checklist task is created as pending. The selected option must belong to the requested supplier and its date must not be manually blocked.
+2. The owning supplier can accept a request with `POST /bookings/{id}/accept`, decline it with `POST /bookings/{id}/decline`, or send an offer using `POST /bookings/{id}/quote` with `{ "amountCents", "currency" }`. An accepted request can still be quoted later. These transitions do not modify manually blocked dates.
 3. The customer accepts a quote with `POST /bookings/{id}/confirm`. This confirms the booking and completes its linked checklist task.
 4. The supplier can decline a request, accepted request, or quote with `POST /bookings/{id}/decline`.
 5. After the event, the owning supplier can call `POST /bookings/{id}/complete`.

@@ -12,6 +12,7 @@ import com.wedora.web.dto.AvailabilityDateResponse;
 import com.wedora.web.dto.SupplierServiceRequest;
 import com.wedora.web.dto.SupplierServiceResponse;
 import com.wedora.web.dto.SupplierServiceTranslationRequest;
+import com.wedora.web.dto.ServiceBookingResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,6 +20,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
@@ -60,6 +63,25 @@ public class SupplierServiceOfferingService {
     }
 
     @Transactional(readOnly = true)
+    public List<ServiceBookingResponse> listOwnedBookings(Long supplierId, String email) {
+        suppliers.requireOwned(supplierId, email);
+        Set<OfferingDate> blockedDates = availabilityBlocks.findByServiceOfferingSupplierId(supplierId).stream()
+                .map(block -> new OfferingDate(block.getServiceOffering().getId(), block.getBlockedDate()))
+                .collect(Collectors.toSet());
+        return bookings.findBySupplierId(supplierId).stream()
+                .filter(booking -> booking.getServiceOffering() != null)
+                .map(booking -> new ServiceBookingResponse(
+                        booking.getId(), booking.getServiceOffering().getId(), booking.getCustomer().getName(),
+                        booking.getEventDate(), booking.getStatus(),
+                        blockedDates.contains(new OfferingDate(booking.getServiceOffering().getId(), booking.getEventDate()))))
+                .sorted(java.util.Comparator.comparing(ServiceBookingResponse::eventDate)
+                        .thenComparing(ServiceBookingResponse::id))
+                .toList();
+    }
+
+    private record OfferingDate(Long serviceId, LocalDate date) {}
+
+    @Transactional(readOnly = true)
     public List<AvailabilityDateResponse> listPublicAvailability(Long supplierId, Long serviceId,
                                                                   LocalDate from, LocalDate to) {
         suppliers.requireApproved(supplierId);
@@ -83,7 +105,7 @@ public class SupplierServiceOfferingService {
             throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Past dates cannot be blocked");
         }
         if (availabilityBlocks.existsByServiceOfferingIdAndBlockedDate(serviceId, date)) {
-            throw new ApiException.Conflict("This date is already blocked or booked for the selected service");
+            throw new ApiException.Conflict("This date is already blocked for the selected service");
         }
         SupplierAvailabilityBlock block = new SupplierAvailabilityBlock();
         block.setServiceOffering(offering);
@@ -98,9 +120,6 @@ public class SupplierServiceOfferingService {
         lockedOffering(supplierId, serviceId);
         SupplierAvailabilityBlock block = availabilityBlocks.findByServiceOfferingIdAndBlockedDate(serviceId, date)
                 .orElseThrow(() -> new ApiException.NotFound("Blocked date not found"));
-        if (block.getBooking() != null) {
-            throw new ApiException.Conflict("A confirmed booking reserves this date and cannot be unblocked");
-        }
         availabilityBlocks.delete(block);
     }
 
@@ -154,8 +173,7 @@ public class SupplierServiceOfferingService {
         }
         return availabilityBlocks.findByServiceOfferingIdAndBlockedDateBetweenOrderByBlockedDateAsc(serviceId, from, to)
                 .stream()
-                .map(block -> new AvailabilityDateResponse(block.getBlockedDate(),
-                        block.getBooking() == null ? "BLOCKED" : "BOOKED"))
+                .map(block -> new AvailabilityDateResponse(block.getBlockedDate(), "BLOCKED"))
                 .toList();
     }
 

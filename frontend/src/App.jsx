@@ -28,6 +28,7 @@ const pricingTypeLabels = {
   TABLE: "pricingPerTable",
   WEDDING: "pricingAllWedding",
 };
+const activeServiceBookingStatuses = new Set(["REQUESTED", "QUOTED", "ACCEPTED", "CONFIRMED"]);
 
 function localDateString(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -1170,7 +1171,7 @@ function App() {
             ? <ChatInbox bookings={apiBookings} user={account} initialBookingId={focusedMessageBookingId} onNotice={setNotice} />
             : activePage === "messages" && (account?.role === "CUSTOMER" || account?.role === "SUPPLIER") && <div className="messages-empty"><div className="messages-illustration"><MessageCircle size={38} /><span>✿</span></div><div className="eyebrow">{t("yourWorkspace").toUpperCase()}</div><h2>{t("messagesEmptyTitle")}</h2><p>{account.role === "SUPPLIER" ? t("supplierMessagesEmpty") : t("customerMessagesEmpty")}</p><button className="primary-button" onClick={() => setActivePage(account.role === "SUPPLIER" ? "bookings" : "discover")}>{account.role === "SUPPLIER" ? t("viewBookingEnquiries") : t("meetSuppliers")} <ArrowRight size={15} /></button></div>}
           {activePage === "collaborations" && account && (account.role === "CUSTOMER" || (account.role === "SUPPLIER" && supplierCollaborationEligible)) && <CollaborationsWorkspace role={account.role} onNotice={setNotice} onSelectedCollaborations={setSelectedCollaborations} />}
-          {activePage === "supplierDashboard" && account?.role === "SUPPLIER" && <SupplierDashboard countryOptions={countryOptions} countryLoadStatus={countryLoadStatus} onRetryCountries={retryCountryLoad} categories={directoryCategories} onNotice={setNotice} />}
+          {activePage === "supplierDashboard" && account?.role === "SUPPLIER" && <SupplierDashboard countryOptions={countryOptions} countryLoadStatus={countryLoadStatus} onRetryCountries={retryCountryLoad} categories={directoryCategories} onNotice={setNotice} bookings={apiBookings} />}
           {activePage === "admin" && account?.role === "ADMIN" && <AdminDashboard onNotice={setNotice} />}
         </div>
       </main>
@@ -2149,7 +2150,7 @@ function CollaborationsWorkspace({ role, onNotice, onSelectedCollaborations }) {
   </section>;
 }
 
-function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries, categories, onNotice }) {
+function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries, categories, onNotice, bookings }) {
   const { t, i18n } = useTranslation();
   const translationLanguages = [
     { code: "en", label: "English" },
@@ -2169,6 +2170,10 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
   const [uploading, setUploading] = useState(false);
   const [mainImageUploading, setMainImageUploading] = useState(false);
   const [serviceOffers, setServiceOffers] = useState([]);
+  const [serviceBookings, setServiceBookings] = useState([]);
+  const [serviceBookingsLoading, setServiceBookingsLoading] = useState(false);
+  const [serviceBookingsError, setServiceBookingsError] = useState(false);
+  const [serviceBookingsReload, setServiceBookingsReload] = useState(0);
   const [serviceLoading, setServiceLoading] = useState(false);
   const [serviceSaving, setServiceSaving] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null);
@@ -2185,7 +2190,10 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const [availabilityError, setAvailabilityError] = useState(false);
+  const [availabilityReload, setAvailabilityReload] = useState(0);
   const [availabilityMonth, setAvailabilityMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const currentProfileId = useRef(profileId);
+  currentProfileId.current = profileId;
 
   useEffect(() => {
     suppliersApi.owned().then(({ data }) => {
@@ -2225,6 +2233,8 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
   useEffect(() => {
     if (!profileId) return;
     let active = true;
+    setAvailabilityServiceId(null);
+    setAvailabilityDates([]);
     setServiceOffers([]);
     setServiceLoading(true);
     supplierServicesApi.listOwned(profileId).then(({ data }) => {
@@ -2236,6 +2246,46 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     });
     return () => { active = false; };
   }, [profileId, onNotice, t]);
+  useEffect(() => {
+    if (!profileId) return;
+    let active = true;
+    setServiceBookings([]);
+    setServiceBookingsLoading(true);
+    setServiceBookingsError(false);
+    supplierServicesApi.ownedBookings(profileId).then(({ data }) => {
+      if (active) setServiceBookings(data);
+    }).catch((error) => {
+      if (active) {
+        setServiceBookingsError(true);
+        onNotice(error.response?.data?.detail || t("errorLoadServiceBookings"));
+      }
+    }).finally(() => {
+      if (active) setServiceBookingsLoading(false);
+    });
+    return () => { active = false; };
+  }, [profileId, serviceBookingsReload, bookings, onNotice, t]);
+  useEffect(() => {
+    if (!profileId || !availabilityServiceId) {
+      setAvailabilityLoading(false);
+      return;
+    }
+    let active = true;
+    setAvailabilityLoading(true);
+    setAvailabilityError(false);
+    const from = localDateString(new Date());
+    const toDate = new Date();
+    toDate.setFullYear(toDate.getFullYear() + 1);
+    supplierServicesApi.ownedAvailability(profileId, availabilityServiceId, from, localDateString(toDate))
+      .then(({ data }) => { if (active) setAvailabilityDates(data); })
+      .catch((error) => {
+        if (active) {
+          setAvailabilityError(true);
+          setAvailabilityDates([]);
+          onNotice(error.response?.data?.detail || t("errorLoadAvailability"));
+        }
+      }).finally(() => { if (active) setAvailabilityLoading(false); });
+    return () => { active = false; };
+  }, [profileId, availabilityServiceId, availabilityReload, onNotice, t]);
   useEffect(() => {
     if (!editingServiceId) return;
     const service = serviceOffers.find((item) => item.id === editingServiceId);
@@ -2407,52 +2457,32 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     }
   }
 
-  async function toggleServiceAvailability(serviceId) {
-      if (availabilityServiceId === serviceId) {
-        setAvailabilityServiceId(null);
-        return;
-      }
-      setAvailabilityServiceId(serviceId);
-      setAvailabilityMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-      setAvailabilityLoading(true);
-      setAvailabilityError(false);
-      const from = localDateString(new Date());
-      const toDate = new Date();
-      toDate.setFullYear(toDate.getFullYear() + 1);
-      try {
-        const { data } = await supplierServicesApi.ownedAvailability(profileId, serviceId, from, localDateString(toDate));
-        setAvailabilityDates(data);
-      } catch (error) {
-        setAvailabilityError(true);
-        onNotice(error.response?.data?.detail || t("errorLoadAvailability"));
-        setAvailabilityDates([]);
-      } finally {
-        setAvailabilityLoading(false);
-      }
+  function toggleServiceAvailability(serviceId) {
+    setAvailabilityServiceId((current) => current === serviceId ? null : serviceId);
+    setAvailabilityDates([]);
+    setAvailabilityMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   }
 
-  async function removeAvailabilityDate(date) {
-      try {
-        await supplierServicesApi.unblockDate(profileId, availabilityServiceId, date);
-        setAvailabilityDates((current) => current.filter((item) => item.date !== date));
-      } catch (error) {
-        onNotice(error.response?.data?.detail || t("errorChangeAvailability"));
-    }
-  }
-
-  async function toggleAvailabilityDate(date) {
-    const item = availabilityDates.find((entry) => entry.date === date);
-    if (item?.status === "BOOKED") return;
-    if (item?.status === "BLOCKED") {
-      await removeAvailabilityDate(date);
-      return;
-    }
+  async function changeAvailabilityDate(serviceId, date, shouldBlock) {
     setAvailabilitySaving(true);
     try {
-      await supplierServicesApi.blockDate(profileId, availabilityServiceId, date);
-      setAvailabilityDates((current) => [...current, { date, status: "BLOCKED" }].sort((a, b) => a.date.localeCompare(b.date)));
+      if (shouldBlock) await supplierServicesApi.blockDate(profileId, serviceId, date);
+      else await supplierServicesApi.unblockDate(profileId, serviceId, date);
+      if (currentProfileId.current !== profileId) return;
+      setServiceBookings((current) => current.map((booking) => booking.serviceOfferingId === serviceId && booking.eventDate === date
+        ? { ...booking, dateBlocked: shouldBlock } : booking));
+      if (availabilityServiceId === serviceId) {
+        setAvailabilityDates((current) => {
+          const remaining = current.filter((item) => item.date !== date);
+          return shouldBlock ? [...remaining, { date, status: "BLOCKED" }].sort((a, b) => a.date.localeCompare(b.date)) : remaining;
+        });
+      }
     } catch (error) {
       onNotice(error.response?.data?.detail || t("errorChangeAvailability"));
+      if (currentProfileId.current === profileId) {
+        setServiceBookingsReload((current) => current + 1);
+        setAvailabilityReload((current) => current + 1);
+      }
     } finally {
       setAvailabilitySaving(false);
     }
@@ -2570,9 +2600,29 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
             <span>{service.price != null ? `${service.currency} ${service.price}` : t("priceOnRequest")}</span>
             <button type="button" className="booking-action" onClick={() => editService(service)}>{t("edit")}</button>
             <button type="button" className="booking-action" onClick={() => deleteService(service.id)}>{t("delete")}</button>
-            <button type="button" className="booking-action" onClick={() => toggleServiceAvailability(service.id)}>
+            <button type="button" className="booking-action" disabled={availabilitySaving} onClick={() => toggleServiceAvailability(service.id)}>
               {availabilityServiceId === service.id ? t("hideAvailability") : t("manageAvailability")}
             </button>
+            <section className="service-bookings" aria-label={`${t("serviceBookings")} - ${displayName}`}>
+              <h4>{t("serviceBookings")}</h4>
+              {serviceBookingsLoading ? <p>{t("loadingServiceBookings")}</p>
+                : serviceBookingsError ? <div role="alert"><p>{t("errorLoadServiceBookings")}</p><button type="button" className="booking-action" onClick={() => setServiceBookingsReload((current) => current + 1)}>{t("invitationRetry")}</button></div>
+                  : serviceBookings.filter((booking) => booking.serviceOfferingId === service.id).length === 0 ? <p>{t("noServiceBookings")}</p>
+                    : <ul>{serviceBookings.filter((booking) => booking.serviceOfferingId === service.id).map((booking) => {
+                      const warn = activeServiceBookingStatuses.has(booking.status) && !booking.dateBlocked;
+                      return <li key={booking.id}>
+                        <div className="service-booking-details">
+                          <strong>{booking.customerName}</strong>
+                          <span>{booking.eventDate} · {t(`status_${booking.status}`, { defaultValue: booking.status })}</span>
+                        </div>
+                        {warn && <div className="service-booking-warning">
+                          <span>{t("serviceDateNotBlocked")}</span>
+                          {booking.eventDate >= availabilityToday && <button type="button" className="booking-action" disabled={availabilitySaving || availabilityLoading}
+                            onClick={() => changeAvailabilityDate(service.id, booking.eventDate, true)}>{t("blockDate")}</button>}
+                        </div>}
+                      </li>;
+                    })}</ul>}
+            </section>
             {availabilityServiceId === service.id && <div className="supplier-availability-manager">
               <div className="availability-calendar-heading">
                 <button type="button" className="booking-action" aria-label={t("previousMonth")}
@@ -2590,22 +2640,18 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
                   if (day < 1 || day > supplierAvailabilityDayCount) return <span className="availability-empty" key={`supplier-empty-${index}`} />;
                   const dayDate = localDateString(new Date(availabilityMonth.getFullYear(), availabilityMonth.getMonth(), day));
                   const status = availabilityDates.find((item) => item.date === dayDate)?.status;
-                  const disabled = dayDate < availabilityToday || availabilityLoading || availabilitySaving
-                    || availabilityError || status === "BOOKED";
+                  const disabled = dayDate < availabilityToday || availabilityLoading || availabilitySaving || availabilityError;
                   return <button type="button" key={dayDate}
-                    className={`availability-day${status === "BLOCKED" ? " unavailable" : ""}${status === "BOOKED" ? " booked" : ""}`}
+                    className={`availability-day${status === "BLOCKED" ? " unavailable" : ""}`}
                     disabled={disabled}
-                    aria-label={`${dayDate}${status ? `, ${t(status === "BOOKED" ? "booked" : "blocked")}` : `, ${t("available")}`}`}
-                    title={t(status === "BOOKED" ? "booked" : status === "BLOCKED" ? "clickToUnblock" : "clickToBlock")}
-                    onClick={() => toggleAvailabilityDate(dayDate)}>{day}</button>;
+                    aria-label={`${dayDate}, ${t(status === "BLOCKED" ? "blocked" : "available")}`}
+                    title={t(status === "BLOCKED" ? "clickToUnblock" : "clickToBlock")}
+                    onClick={() => changeAvailabilityDate(service.id, dayDate, status !== "BLOCKED")}>{day}</button>;
                 })}
               </div>
               {availabilityLoading && <p>{t("loadingAvailability")}</p>}
-              {availabilityError && <p className="auth-error" role="alert">{t("availabilityFallback")}</p>}
+              {availabilityError && <p className="auth-error" role="alert">{t("supplierAvailabilityLoadError")} <button type="button" className="booking-action" onClick={() => setAvailabilityReload((current) => current + 1)}>{t("invitationRetry")}</button></p>}
               {!availabilityLoading && !availabilityError && <p>{t("supplierAvailabilityHelp")}</p>}
-              {availabilityDates.filter((item) => item.status === "BOOKED").length > 0 && <ul>
-                {availabilityDates.filter((item) => item.status === "BOOKED").map((item) => <li key={item.date}><span>{item.date} · {t("booked")}</span></li>)}
-              </ul>}
             </div>}
           </article>;
         })}</div>}
