@@ -76,8 +76,10 @@ public class SecurityConfig {
             allowedOrigins.add("http://localhost:5173");
             allowedOrigins.add("http://127.0.0.1:5173");
             allowedOrigins.add("https://weddingmaster-web.onrender.com");
+            allowedOrigins.add("https://www.wedmasterai.com");
         }else {
              allowedOrigins.add("https://weddingmaster-web.onrender.com");
+             allowedOrigins.add("https://www.wedmasterai.com");
         }
         configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
