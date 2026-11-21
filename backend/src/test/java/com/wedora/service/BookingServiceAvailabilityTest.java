@@ -110,7 +110,7 @@ class BookingServiceAvailabilityTest {
         when(availabilityBlocks.existsByServiceOfferingIdAndBlockedDate(8L, booking.getEventDate())).thenReturn(true);
 
         assertThatThrownBy(() -> bookingService.request("couple@example.test",
-                new com.wedora.web.dto.BookingRequest(3L, 8L, booking.getEventDate(), null)))
+                new com.wedora.web.dto.BookingRequest(3L, 8L, booking.getEventDate(), null, 1)))
                 .isInstanceOf(ApiException.Conflict.class);
         verify(bookings, never()).save(any());
     }
@@ -124,11 +124,37 @@ class BookingServiceAvailabilityTest {
         when(suppliers.findByIdAndApprovedTrueAndActiveTrue(3L)).thenReturn(Optional.of(booking.getSupplier()));
         when(offerings.findByIdForUpdate(8L)).thenReturn(Optional.of(offering));
         when(bookings.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        var request = new com.wedora.web.dto.BookingRequest(3L, 8L, booking.getEventDate(), null);
+        var request = new com.wedora.web.dto.BookingRequest(3L, 8L, booking.getEventDate(), null, 1);
 
-        assertThat(bookingService.request("couple@example.test", request).status()).isEqualTo(BookingStatus.REQUESTED);
-        assertThat(bookingService.request("couple@example.test", request).status()).isEqualTo(BookingStatus.REQUESTED);
+        assertThat(bookingService.request("couple@example.test", request).status()).isEqualTo(BookingStatus.NEW_REQUEST);
+        assertThat(bookingService.request("couple@example.test", request).status()).isEqualTo(BookingStatus.NEW_REQUEST);
         verify(bookings, times(2)).save(any());
         verify(availabilityBlocks, never()).save(any());
+    }
+
+    @Test
+    void rejectsQuantityOutsideServiceLimits() {
+        AppUser customer = booking.getCustomer();
+        customer.setRole(Role.CUSTOMER);
+        offering.setMinimumAmount(2);
+        offering.setMaximumAmount(5);
+        when(users.findByEmailIgnoreCase("couple@example.test")).thenReturn(Optional.of(customer));
+        when(suppliers.findByIdAndApprovedTrueAndActiveTrue(3L)).thenReturn(Optional.of(booking.getSupplier()));
+        when(offerings.findByIdForUpdate(8L)).thenReturn(Optional.of(offering));
+        assertThatThrownBy(() -> bookingService.request("couple@example.test",
+                new com.wedora.web.dto.BookingRequest(3L, 8L, booking.getEventDate(), null, 6)))
+                .isInstanceOf(ApiException.class);
+        verify(bookings, never()).save(any());
+    }
+
+    @Test
+    void generalRequestRequiresPositiveQuantity() {
+        AppUser customer = booking.getCustomer();
+        customer.setRole(Role.CUSTOMER);
+        when(users.findByEmailIgnoreCase("couple@example.test")).thenReturn(Optional.of(customer));
+        assertThatThrownBy(() -> bookingService.request("couple@example.test",
+                new com.wedora.web.dto.BookingRequest(3L, null, booking.getEventDate(), null, null)))
+                .isInstanceOf(ApiException.class);
+        verify(bookings, never()).save(any());
     }
 }

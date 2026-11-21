@@ -6,6 +6,7 @@ import com.wedora.web.ApiException;
 import com.wedora.web.dto.BookingRequest;
 import com.wedora.web.dto.BookingResponse;
 import com.wedora.web.dto.QuoteRequest;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,9 @@ public class BookingService {
     public BookingResponse request(String email, BookingRequest request) {
         AppUser customer = userByEmail(email);
         if (customer.getRole() != Role.CUSTOMER) throw new ApiException.Forbidden("Only customer accounts can request bookings");
+        if (request.quantity() == null || request.quantity() < 1) {
+            throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "A positive quantity is required");
+        }
         Supplier supplier = suppliers.findByIdAndApprovedTrueAndActiveTrue(request.supplierId())
                 .orElseThrow(() -> new ApiException.NotFound("Supplier not found"));
         SupplierServiceOffering offering = null;
@@ -55,6 +59,9 @@ public class BookingService {
                     offering.getId(), request.eventDate())) {
                 throw new ApiException.Conflict("This service is not available on the selected date");
             }
+            if (request.quantity() < offering.getMinimumAmount() || request.quantity() > offering.getMaximumAmount()) {
+                throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Quantity is outside the service limits");
+            }
         }
         Booking booking = new Booking();
         booking.setCustomer(customer);
@@ -63,6 +70,13 @@ public class BookingService {
         booking.setEventDate(request.eventDate());
         booking.setNotes(request.notes());
         booking.setCurrency(supplier.getCurrency());
+        booking.setQuantity(request.quantity());
+        if (offering != null) {
+            booking.setServicePrice(offering.getPrice());
+            booking.setServicePriceCurrency(supplier.getCurrency());
+            booking.setServicePricingType(offering.getPricingType());
+        }
+        booking.addHistory(BookingStatus.NEW_REQUEST, "CUSTOMER", request.notes());
         booking = bookings.save(booking);
 
         var checklistCategory = offering == null ? supplier.getCategory() : offering.getCategory();
@@ -103,9 +117,10 @@ public class BookingService {
 
     @Transactional
     public BookingResponse quote(Long bookingId, String email, QuoteRequest request) {
-        Booking booking = bookingById(bookingId);
+        Booking booking = bookingForUpdate(bookingId);
         ensureSupplierOwner(booking, email);
-        if (booking.getStatus() != BookingStatus.REQUESTED && booking.getStatus() != BookingStatus.ACCEPTED) {
+        if (booking.getStatus() != BookingStatus.REQUESTED && booking.getStatus() != BookingStatus.ACCEPTED
+                && booking.getStatus() != BookingStatus.UNDER_REVIEW) {
             throw new ApiException.Conflict("Only requested or accepted bookings can be quoted");
         }
         booking.setQuotedAmountCents(request.amountCents());
@@ -113,7 +128,11 @@ public class BookingService {
             if (!request.currency().matches("[A-Za-z]{3}")) throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Currency must be a three-letter ISO code");
             booking.setCurrency(request.currency().toUpperCase(Locale.ROOT));
         }
-        booking.setStatus(BookingStatus.QUOTED);
+        if (booking.getStatus() == BookingStatus.UNDER_REVIEW) {
+            booking.addHistory(BookingStatus.SENT_TO_COUPLE, "SUPPLIER", null);
+        } else {
+            booking.setStatus(BookingStatus.QUOTED);
+        }
         updateChecklist(booking, "Quote received", "Awaiting your confirmation");
         notifications.quoteReceived(booking);
         userNotifications.notify(booking.getCustomer(), booking, "QUOTE_RECEIVED",
@@ -136,6 +155,109 @@ public class BookingService {
         return BookingResponse.from(booking);
     }
 
+    @Transactional
+        public BookingResponse review(Long bookingId, String email, String comment) {
+            Booking booking = bookingForUpdate(bookingId);
+            if (booking.getStatus() == BookingStatus.NEW_REQUEST) {
+                ensureSupplierOwner(booking, email);
+                booking.addHistory(BookingStatus.UNDER_REVIEW, "SUPPLIER", null);
+                userNotifications.notify(booking.getCustomer(), booking, "REQUEST_UPDATED", booking.getSupplier().getBusinessName());
+            } else if (booking.getStatus() == BookingStatus.SENT_TO_COUPLE) {
+                ensureCustomer(booking, email);
+                requireComment(comment);
+                booking.addHistory(BookingStatus.UNDER_REVIEW, "CUSTOMER", comment.trim());
+                userNotifications.notify(booking.getSupplier().getOwner(), booking, "REQUEST_UPDATED", booking.getCustomer().getName());
+            } else {
+                throw new ApiException.Conflict("This request cannot be moved under review");
+            }
+            return BookingResponse.from(booking);
+        }
+
+        @Transactional
+        public BookingResponse respondToQuote(Long bookingId, String email) {
+            Booking booking = bookingForUpdate(bookingId);
+            ensureCustomer(booking, email);
+            if (booking.getStatus() != BookingStatus.SENT_TO_COUPLE) {
+                throw new ApiException.Conflict("Only a sent quotation can be accepted");
+            }
+            booking.addHistory(BookingStatus.ACCEPTED_BY_COUPLE, "CUSTOMER", null);
+            userNotifications.notify(booking.getSupplier().getOwner(), booking, "REQUEST_UPDATED", booking.getCustomer().getName());
+            return BookingResponse.from(booking);
+        }
+
+        @Transactional
+        public BookingResponse finalizeRequest(Long bookingId, String email) {
+            Booking booking = bookingForUpdate(bookingId);
+            ensureSupplierOwner(booking, email);
+            if (booking.getStatus() != BookingStatus.ACCEPTED_BY_COUPLE) {
+                throw new ApiException.Conflict("Only a quotation accepted by the couple can be finalized");
+            }
+            if (booking.getSupplier().getTimeZone() == null) {
+                throw new ApiException.Conflict("Set your business time zone before accepting the request");
+            }
+            booking.addHistory(BookingStatus.WAITING_PAYMENT, "SUPPLIER", null);
+            userNotifications.notify(booking.getCustomer(), booking, "REQUEST_UPDATED", booking.getSupplier().getBusinessName());
+            updateChecklist(booking, "Booking accepted", "Payment due");
+            return BookingResponse.from(booking);
+        }
+
+        @Transactional
+        public BookingResponse declineRequest(Long bookingId, String email, String comment) {
+            Booking booking = bookingForUpdate(bookingId);
+            requireComment(comment);
+            if (booking.getStatus() == BookingStatus.SENT_TO_COUPLE) {
+                ensureCustomer(booking, email);
+                booking.addHistory(BookingStatus.DECLINED_BY_COUPLE, "CUSTOMER", comment.trim());
+                userNotifications.notify(booking.getSupplier().getOwner(), booking, "REQUEST_UPDATED", booking.getCustomer().getName());
+            } else if (booking.getStatus() == BookingStatus.NEW_REQUEST || booking.getStatus() == BookingStatus.UNDER_REVIEW
+                    || booking.getStatus() == BookingStatus.ACCEPTED_BY_COUPLE) {
+                ensureSupplierOwner(booking, email);
+                booking.addHistory(BookingStatus.DECLINED_BY_SUPPLIER, "SUPPLIER", comment.trim());
+                userNotifications.notify(booking.getCustomer(), booking, "REQUEST_UPDATED", booking.getSupplier().getBusinessName());
+            } else {
+                throw new ApiException.Conflict("This request cannot be declined");
+            }
+            updateChecklist(booking, "Request declined", "No payment due");
+            return BookingResponse.from(booking);
+        }
+
+        @Transactional
+        public void paymentSucceeded(Long bookingId) {
+            Booking booking = bookingForUpdate(bookingId);
+            if (booking.getStatus() == BookingStatus.WAITING_PAYMENT) {
+                booking.addHistory(BookingStatus.ACTIVE, "SYSTEM", null);
+                updateChecklist(booking, "Booking active", "Paid");
+                userNotifications.notify(booking.getCustomer(), booking, "REQUEST_UPDATED", "Wedmaster");
+                userNotifications.notify(booking.getSupplier().getOwner(), booking, "REQUEST_UPDATED", "Wedmaster");
+            }
+        }
+
+        @Scheduled(fixedDelay = 3600000)
+        @Transactional
+        public void closePastRequests() {
+            for (Booking candidate : bookings.findByStatus(BookingStatus.ACTIVE)) {
+                Booking booking = bookingForUpdate(candidate.getId());
+                String zone = booking.getSupplier().getTimeZone();
+                if (booking.getStatus() == BookingStatus.ACTIVE && zone != null
+                        && booking.getEventDate().isBefore(java.time.LocalDate.now(java.time.ZoneId.of(zone)))) {
+                    booking.addHistory(BookingStatus.CLOSED, "SYSTEM", null);
+                    userNotifications.notify(booking.getCustomer(), booking, "REQUEST_UPDATED", "Wedmaster");
+                    userNotifications.notify(booking.getSupplier().getOwner(), booking, "REQUEST_UPDATED", "Wedmaster");
+                }
+            }
+        }
+
+        private void requireComment(String comment) {
+            if (comment == null || comment.isBlank() || comment.length() > 3000) {
+                throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "A comment is required");
+            }
+        }
+
+        private void ensureCustomer(Booking booking, String email) {
+            if (!booking.getCustomer().getEmail().equalsIgnoreCase(email)) {
+                throw new ApiException.Forbidden("Only the customer can respond to this request");
+            }
+        }
     @Transactional
     public BookingResponse confirm(Long bookingId, String email) {
         Booking booking = bookingById(bookingId);
@@ -190,9 +312,20 @@ public class BookingService {
         return booking;
     }
 
+    @Transactional
+    public Booking requireParticipantForUpdate(Long bookingId, String email) {
+        Booking booking = bookingForUpdate(bookingId);
+        boolean customer = booking.getCustomer().getEmail().equalsIgnoreCase(email);
+        boolean supplier = booking.getSupplier().getOwner().getEmail().equalsIgnoreCase(email);
+        if (!customer && !supplier) throw new ApiException.Forbidden("You are not part of this booking");
+        return booking;
+    }
+
     private void updateChecklist(Booking booking, String contract, String payment) {
         checklist.findByBookingId(booking.getId()).forEach(item -> {
-            item.setCompleted(booking.getStatus() == BookingStatus.CONFIRMED);
+            item.setCompleted(booking.getStatus() == BookingStatus.CONFIRMED
+                    || booking.getStatus() == BookingStatus.WAITING_PAYMENT
+                    || booking.getStatus() == BookingStatus.ACTIVE || booking.getStatus() == BookingStatus.CLOSED);
             item.setContractDetails(contract);
             item.setPaymentStatus(payment);
         });
@@ -206,6 +339,10 @@ public class BookingService {
 
     private Booking bookingById(Long id) {
         return bookings.findById(id).orElseThrow(() -> new ApiException.NotFound("Booking not found"));
+    }
+
+    private Booking bookingForUpdate(Long id) {
+        return bookings.findByIdForUpdate(id).orElseThrow(() -> new ApiException.NotFound("Booking not found"));
     }
 
     private AppUser userByEmail(String email) {

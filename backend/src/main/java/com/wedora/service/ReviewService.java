@@ -39,7 +39,7 @@ public class ReviewService {
         if (!booking.getCustomer().getId().equals(author.getId())) {
             throw new ApiException.Forbidden("Only the customer can review this booking");
         }
-        if (booking.getStatus() != BookingStatus.COMPLETED) {
+        if (booking.getStatus() != BookingStatus.COMPLETED && booking.getStatus() != BookingStatus.CLOSED) {
             throw new ApiException.Conflict("Reviews are available after a booking is completed");
         }
         if (reviews.existsByBookingIdAndAuthorId(bookingId, author.getId())) {

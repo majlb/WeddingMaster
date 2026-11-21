@@ -48,11 +48,12 @@ public class PaymentService {
     @Transactional
     public PaymentResponse createIntent(Long bookingId, String email) {
         requireStripeConfigured();
-        Booking booking = bookings.requireParticipant(bookingId, email);
+        Booking booking = bookings.requireParticipantForUpdate(bookingId, email);
         if (!booking.getCustomer().getEmail().equalsIgnoreCase(email)) {
             throw new ApiException.Forbidden("Only the customer can pay for this booking");
         }
-        if (booking.getStatus() != BookingStatus.CONFIRMED || booking.getQuotedAmountCents() == null) {
+        if ((booking.getStatus() != BookingStatus.CONFIRMED && booking.getStatus() != BookingStatus.WAITING_PAYMENT)
+                || booking.getQuotedAmountCents() == null) {
             throw new ApiException.Conflict("A confirmed booking with an agreed quote is required");
         }
         Payment previous = payments.findFirstByBookingIdOrderByCreatedAtDesc(bookingId).orElse(null);
@@ -136,8 +137,12 @@ public class PaymentService {
         } else {
             return;
         }
-        payments.findByStripePaymentIntentId(intentId).ifPresent(payment -> {
+        payments.findByStripePaymentIntentIdForUpdate(intentId).ifPresent(payment -> {
+            if (status == PaymentStatus.FAILED && payment.getStatus() != PaymentStatus.PENDING) return;
+            if (status == PaymentStatus.SUCCEEDED && payment.getStatus() != PaymentStatus.PENDING
+                    && payment.getStatus() != PaymentStatus.FAILED) return;
             payment.setStatus(status);
+            if (status == PaymentStatus.SUCCEEDED) bookings.paymentSucceeded(payment.getBooking().getId());
             checklist.findByBookingId(payment.getBooking().getId()).forEach(item ->
                     item.setPaymentStatus(status == PaymentStatus.SUCCEEDED ? "Paid" :
                             status == PaymentStatus.REFUNDED ? "Refunded" :

@@ -123,6 +123,10 @@ export const bookingsApi = {
   decline: (id) => api.post(`/bookings/${id}/decline`),
   confirm: (id) => api.post(`/bookings/${id}/confirm`),
   complete: (id) => api.post(`/bookings/${id}/complete`),
+  review: (id, comment) => api.post(`/bookings/${id}/review`, comment ? { comment } : {}),
+  acceptQuotation: (id) => api.post(`/bookings/${id}/accept-quotation`),
+  finalize: (id) => api.post(`/bookings/${id}/finalize`),
+  declineRequest: (id, comment) => api.post(`/bookings/${id}/decline-request`, { comment }),
 };
 export const checklistApi = {
   list: () => api.get("/checklist"),

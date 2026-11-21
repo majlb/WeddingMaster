@@ -13,7 +13,7 @@ public record SupplierResponse(
         BigDecimal startingPrice, String currency, String contactEmail, String contactPhone, String whatsapp,
         String website, String facebook, String instagram, String tiktok,
         String mainImageUrl, List<String> countryCodes, Double rating, Integer reviewCount, boolean approved,
-        boolean active,
+        boolean active, String timeZone,
         Map<String, Map<String, String>> localizedContent, List<CategoryResponse> categories
 ) {
     public static SupplierResponse from(Supplier supplier) {
@@ -40,7 +40,7 @@ public record SupplierResponse(
                 supplier.getWebsite(), supplier.getFacebook(), supplier.getInstagram(), supplier.getTiktok(),
                 supplier.getMainImageUrl(),
                 supplier.getCountryCodes(), supplier.getRating(),
-                supplier.getReviewCount(), supplier.isApproved(), supplier.isActive(),
+                supplier.getReviewCount(), supplier.isApproved(), supplier.isActive(), supplier.getTimeZone(),
                 supplier.getLocalizedContent(), assignedCategories);
     }
 }

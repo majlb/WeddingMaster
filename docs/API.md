@@ -87,19 +87,19 @@ The couple-only `POST /api/assistant/chat` endpoint uses the backend AI provider
 
 ## Bookings and checklist
 
-1. A customer sends `POST /bookings` with `{ "supplierId", "serviceOfferingId", "eventDate", "notes" }`; `serviceOfferingId` is optional for legacy/general enquiries. A linked checklist task is created as pending. The selected option must belong to the requested supplier and its date must not be manually blocked.
-2. The owning supplier can accept a request with `POST /bookings/{id}/accept`, decline it with `POST /bookings/{id}/decline`, or send an offer using `POST /bookings/{id}/quote` with `{ "amountCents", "currency" }`. An accepted request can still be quoted later. These transitions do not modify manually blocked dates.
-3. The customer accepts a quote with `POST /bookings/{id}/confirm`. This confirms the booking and completes its linked checklist task.
-4. The supplier can decline a request, accepted request, or quote with `POST /bookings/{id}/decline`.
-5. After the event, the owning supplier can call `POST /bookings/{id}/complete`.
-6. `GET /bookings` lists the current user's bookings. A supplier sees bookings for their own profiles. Responses include the customer name, event date, notes, status, quote details, and the localized selected option name when applicable.
+1. A customer sends `POST /bookings` with `supplierId`, optional `serviceOfferingId`, `eventDate`, optional `notes`, and a positive `quantity`. A service request requires a quantity within the service's minimum and maximum. The selected service must belong to the supplier and its date must not be manually blocked. The request starts as `NEW_REQUEST` and records the service's price, currency and pricing type at submission.
+2. The supplier moves a new request to `UNDER_REVIEW` with `POST /bookings/{id}/review`, or declines it with `POST /bookings/{id}/decline-request` and `{ "comment": "..." }`. While under review the supplier can decline it or send a quote with `POST /bookings/{id}/quote` and `{ "amountCents", "currency" }`, moving it to `SENT_TO_COUPLE`.
+3. The couple may decline with a comment, accept with `POST /bookings/{id}/accept-quotation`, or return it to `UNDER_REVIEW` with `POST /bookings/{id}/review` and `{ "comment": "..." }`. A decline or return for review requires a nonblank comment. Acceptance moves it to `ACCEPTED_BY_COUPLE`.
+4. The supplier can decline the accepted request with a comment, or call `POST /bookings/{id}/finalize` to move it to `WAITING_PAYMENT`. The supplier must first set a valid IANA `timeZone` through `PUT /suppliers/{id}`. The agreed quote is the payable price.
+5. A verified successful Stripe webhook moves the request to `ACTIVE`. An hourly job closes active requests after the event date in the supplier's configured time zone. Availability blocks remain manually managed.
+6. `GET /bookings` returns participant-visible status history with actor, comment and timestamp. Existing bookings retain their legacy statuses and their existing accept, decline, confirm and complete endpoints; no historical transitions are invented for them.
 7. Couples can set their preferred `USD` or `EUR` currency with `PUT /api/users/me/currency` and `{ "currencyCode": "USD" }`; new accounts default to USD. `GET /checklist`, `POST /checklist` (with optional `categorySlug` and `budgetAmount` in the couple's selected currency), `PUT /checklist/{id}` (to update the title, category, due date, notes, and budget), `PATCH /checklist/{id}?completed=true|false`, and `DELETE /checklist/{id}` let a customer manage their own checklist. Checklist changes do not alter the associated booking. The client shows the sum of item budgets in the selected currency. Changing the preference changes display only and does not convert saved amounts.
 
-Reviews can be submitted using `POST /bookings/{id}/reviews` with `{ "rating": 1..5, "comment": "..." }` once a booking is marked `COMPLETED`.
+Reviews can be submitted using `POST /bookings/{id}/reviews` with `{ "rating": 1..5, "comment": "..." }` once a booking is `CLOSED` (or `COMPLETED` for legacy bookings).
 
 ## Payments and invoices
 
-- `POST /bookings/{id}/payments` creates a Stripe PaymentIntent for a confirmed, quoted booking and returns a client secret for Stripe Elements.
+- `POST /bookings/{id}/payments` creates a Stripe PaymentIntent for a `WAITING_PAYMENT` request (or a legacy confirmed booking) and returns a client secret for Stripe Elements.
 - `GET /payments` returns the signed-in customer's payment history.
 - Stripe posts signed events to `POST /payments/webhook` using `Stripe-Signature`. Configure both Stripe secrets before enabling this route.
 - `POST /admin/payments/{id}/refund` submits a full Stripe refund; the payment record is updated from webhook events.

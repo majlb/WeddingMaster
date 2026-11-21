@@ -4,6 +4,7 @@ import com.wedora.service.BookingService;
 import com.wedora.web.dto.BookingRequest;
 import com.wedora.web.dto.BookingResponse;
 import com.wedora.web.dto.QuoteRequest;
+import com.wedora.web.dto.BookingCommentRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -52,5 +53,27 @@ public class BookingController {
     @PostMapping("/{id}/complete")
     public BookingResponse complete(@PathVariable Long id, @AuthenticationPrincipal String email) {
         return bookingService.complete(id, email);
+    }
+
+    @PostMapping("/{id}/review")
+    public BookingResponse review(@PathVariable Long id, @AuthenticationPrincipal String email,
+                                  @RequestBody(required = false) BookingCommentRequest request) {
+        return bookingService.review(id, email, request == null ? null : request.comment());
+    }
+
+    @PostMapping("/{id}/accept-quotation")
+    public BookingResponse acceptQuotation(@PathVariable Long id, @AuthenticationPrincipal String email) {
+        return bookingService.respondToQuote(id, email);
+    }
+
+    @PostMapping("/{id}/finalize")
+    public BookingResponse finalizeRequest(@PathVariable Long id, @AuthenticationPrincipal String email) {
+        return bookingService.finalizeRequest(id, email);
+    }
+
+    @PostMapping("/{id}/decline-request")
+    public BookingResponse declineRequest(@PathVariable Long id, @AuthenticationPrincipal String email,
+                                          @Valid @RequestBody BookingCommentRequest request) {
+        return bookingService.declineRequest(id, email, request.comment());
     }
 }

@@ -28,7 +28,7 @@ const pricingTypeLabels = {
   TABLE: "pricingPerTable",
   WEDDING: "pricingAllWedding",
 };
-const activeServiceBookingStatuses = new Set(["REQUESTED", "QUOTED", "ACCEPTED", "CONFIRMED"]);
+const activeServiceBookingStatuses = new Set(["REQUESTED", "QUOTED", "ACCEPTED", "CONFIRMED", "NEW_REQUEST", "UNDER_REVIEW", "SENT_TO_COUPLE", "ACCEPTED_BY_COUPLE", "WAITING_PAYMENT", "ACTIVE"]);
 
 function localDateString(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -835,7 +835,8 @@ function App() {
         supplierId: supplier.id,
         serviceOfferingId: details.serviceOfferingId || null,
         eventDate: details.eventDate,
-        notes: [details.notes, details.guests ? `Guest count: ${details.guests}` : ""].filter(Boolean).join("\n"),
+        notes: details.notes,
+        quantity: details.quantity || null,
       });
       setApiBookings((current) => [booking, ...(current || [])]);
     } catch (error) {
@@ -1190,8 +1191,9 @@ function App() {
       {paymentBookingId && <PaymentModal bookingId={paymentBookingId} onClose={() => setPaymentBookingId(null)} onPaid={async () => {
         setPaymentBookingId(null);
         try {
-          const { data } = await paymentsApi.history();
-          setPaymentRecords(data);
+          const [payments, bookings] = await Promise.all([paymentsApi.history(), bookingsApi.list()]);
+          setPaymentRecords(payments.data);
+          setApiBookings(bookings.data);
           setNotice(t("paymentSubmitted"));
         } catch (error) {
           setNotice(error.response?.data?.detail || t("errorRefreshPayments"));
@@ -1200,6 +1202,16 @@ function App() {
       {bookingDetails && <BookingDetailsModal booking={bookingDetails} role={account?.role} onClose={() => setBookingDetails(null)} onQuote={() => {
         setQuoteBooking(bookingDetails);
         setBookingDetails(null);
+      }} onWorkflow={async (action, comment) => {
+        try {
+          const { data } = await bookingsApi[action](bookingDetails.id, comment);
+          setApiBookings((items) => items.map((item) => item.id === data.id ? data : item));
+          setBookingDetails(data);
+          return true;
+        } catch (error) {
+          setNotice(error.response?.data?.detail || t("errorUpdateRequest"));
+          return false;
+        }
       }} onAccept={async () => {
         try {
           const { data } = await bookingsApi.accept(bookingDetails.id);
@@ -2216,6 +2228,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
       longitude: profile.longitude ?? null,
       startingPrice: profile.startingPrice || "",
       currency: profile.currency || "USD",
+      timeZone: profile.timeZone || "",
       contactEmail: profile.contactEmail || "",
       contactPhone: profile.contactPhone || "",
       whatsapp: profile.whatsapp || "",
@@ -2315,6 +2328,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
     try {
       const { data } = await suppliersApi.update(profileId, {
         ...form,
+        timeZone: form.timeZone || null,
         countryCodes: form.countryCodes,
         startingPrice: form.startingPrice === "" ? null : Number(form.startingPrice),
       });
@@ -2552,6 +2566,7 @@ function SupplierDashboard({ countryOptions, countryLoadStatus, onRetryCountries
       <CountryMultiSelect label={t("countriesServed")} countryOptions={countryOptions}
         countryLoadStatus={countryLoadStatus} onRetryCountries={onRetryCountries}
         value={form.countryCodes} onChange={(countryCodes) => setForm((current) => ({ ...current, countryCodes }))} />
+      <label>{t("supplierTimeZone")}<input type="text" list="supplier-time-zones" value={form.timeZone || ""} onChange={(event) => setForm((current) => ({ ...current, timeZone: event.target.value }))} placeholder="Europe/Paris" /><datalist id="supplier-time-zones">{(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : []).map((zone) => <option key={zone} value={zone} />)}</datalist><small>{t("supplierTimeZoneHelp")}</small></label>
       <section className="supplier-location-editor">
         <div><strong>{t("pinBusinessLocation")}</strong><p>{t("pinBusinessLocationHelp")}</p></div>
         <SupplierLocationMap value={{ latitude: form.latitude, longitude: form.longitude }} interactive onChange={({ latitude, longitude }) => setForm((current) => ({ ...current, latitude, longitude }))} />
@@ -3385,16 +3400,27 @@ function BookingRow({ booking, role, payment, reviewed, onNotice, onDetails, onP
     {booking.status === "QUOTED" && role === "CUSTOMER" && <button className="booking-action" onClick={acceptQuote}>{t("acceptQuote")}</button>}
     {role === "SUPPLIER" && <button className="booking-action booking-details-action" onClick={onDetails}>{booking.status === "REQUESTED" ? t("reviewRequest") : t("viewDetails")}</button>}
     {role === "CUSTOMER" && <button className="booking-action booking-details-action" onClick={onDetails}>{t("viewDetails")}</button>}
-    {booking.status === "CONFIRMED" && role === "CUSTOMER" && payment?.status === "SUCCEEDED" && <button className="booking-action" onClick={downloadInvoice}>{t("downloadInvoice")}</button>}
-    {booking.status === "CONFIRMED" && role === "CUSTOMER" && canRetryPayment && <button className="booking-action" onClick={onPay}>{t("paySecurely")}</button>}
+    {["CONFIRMED", "ACTIVE", "CLOSED"].includes(booking.status) && role === "CUSTOMER" && payment?.status === "SUCCEEDED" && <button className="booking-action" onClick={downloadInvoice}>{t("downloadInvoice")}</button>}
+    {["CONFIRMED", "WAITING_PAYMENT"].includes(booking.status) && role === "CUSTOMER" && canRetryPayment && <button className="booking-action" onClick={onPay}>{t("paySecurely")}</button>}
     {booking.status === "CONFIRMED" && role === "SUPPLIER" && <button className="booking-action" onClick={completeBooking}>{t("markComplete")}</button>}
-    {booking.status === "COMPLETED" && role === "CUSTOMER" && <button className="booking-action" disabled={reviewed} onClick={onReview}>{reviewed ? t("reviewed") : t("leaveReview")}</button>}
+    {["COMPLETED", "CLOSED"].includes(booking.status) && role === "CUSTOMER" && <button className="booking-action" disabled={reviewed} onClick={onReview}>{reviewed ? t("reviewed") : t("leaveReview")}</button>}
     <ChevronRight size={17} />
   </div>;
 }
 
-function BookingDetailsModal({ booking, role, onClose, onQuote, onAccept, onDecline }) {
+function BookingDetailsModal({ booking, role, onClose, onQuote, onAccept, onDecline, onWorkflow }) {
   const { t } = useTranslation();
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+  async function workflow(action, needsComment = false) {
+    if (needsComment && !comment.trim()) return;
+    setSaving(true);
+    try {
+      if (await onWorkflow(action, needsComment ? comment.trim() : null)) setComment("");
+    } finally {
+      setSaving(false);
+    }
+  }
   const supplierCanRespond = role === "SUPPLIER"
     && ["REQUESTED", "ACCEPTED", "QUOTED"].includes(booking.status);
   const canAcceptRequest = role === "SUPPLIER" && booking.status === "REQUESTED";
@@ -3410,7 +3436,9 @@ function BookingDetailsModal({ booking, role, onClose, onQuote, onAccept, onDecl
         <div><span>{t("eventDate")}</span><strong>{booking.eventDate}</strong></div>
         <div><span>{t("status")}</span><strong>{t(`status_${booking.status}`, { defaultValue: booking.status })}</strong></div>
         {booking.serviceOfferingName && <div><span>{t("selectedService")}</span><strong>{booking.serviceOfferingName}</strong></div>}
-        {booking.quotedAmountCents && <div><span>{t("offer")}</span><strong>{(booking.quotedAmountCents / 100).toFixed(2)} {booking.currency}</strong></div>}
+        {booking.quantity != null && <div><span>{t("requestQuantity")}</span><strong>{booking.quantity}</strong></div>}
+        {booking.serviceOfferingName && <div><span>{t("servicePrice")}</span><strong>{booking.servicePrice == null ? "—" : `${booking.servicePrice} ${booking.servicePriceCurrency || ""}`} {pricingTypeLabels[booking.servicePricingType] ? `· ${t(pricingTypeLabels[booking.servicePricingType])}` : ""}</strong></div>}
+        {booking.quotedAmountCents && <div><span>{t(["WAITING_PAYMENT", "ACTIVE", "CLOSED"].includes(booking.status) ? "price" : "offer")}</span><strong>{(booking.quotedAmountCents / 100).toFixed(2)} {booking.currency}</strong></div>}
       </div>
       <div className="booking-request-notes"><strong>{t("notesFromCouple")}</strong><p>{booking.notes?.trim() || t("noAdditionalRequestDetails")}</p></div>
       {supplierCanRespond && <div className="booking-detail-actions">
@@ -3420,6 +3448,17 @@ function BookingDetailsModal({ booking, role, onClose, onQuote, onAccept, onDecl
       </div>}
       {role === "CUSTOMER" && booking.status === "ACCEPTED" && <p className="booking-detail-hint">{t("supplierAcceptedHint")}</p>}
       {role === "CUSTOMER" && booking.status === "QUOTED" && <p className="booking-detail-hint">{t("supplierQuoteHint")}</p>}
+      {(role === "SUPPLIER" && ["NEW_REQUEST", "UNDER_REVIEW", "ACCEPTED_BY_COUPLE"].includes(booking.status) || role === "CUSTOMER" && booking.status === "SENT_TO_COUPLE") && <div className="booking-workflow">
+        <label>{t("requestComment")}<textarea value={comment} maxLength={3000} onChange={(event) => setComment(event.target.value)} /></label>
+        <div className="booking-detail-actions">
+          {role === "SUPPLIER" && booking.status === "NEW_REQUEST" && <button className="primary-button" disabled={saving} onClick={() => workflow("review")}>{t("moveUnderReview")}</button>}
+          {role === "SUPPLIER" && booking.status === "UNDER_REVIEW" && <button className="primary-button" disabled={saving} onClick={onQuote}>{t("makeOffer")}</button>}
+          {role === "SUPPLIER" && booking.status === "ACCEPTED_BY_COUPLE" && <button className="primary-button" disabled={saving} onClick={() => workflow("finalize")}>{t("approveForPayment")}</button>}
+          {role === "CUSTOMER" && booking.status === "SENT_TO_COUPLE" && <><button className="primary-button" disabled={saving} onClick={() => workflow("acceptQuotation")}>{t("acceptQuote")}</button><button className="secondary-button" disabled={saving || !comment.trim()} onClick={() => workflow("review", true)}>{t("sendBackForReview")}</button></>}
+          <button className="secondary-button" disabled={saving || !comment.trim()} onClick={() => workflow("declineRequest", true)}>{t("decline")}</button>
+        </div>
+      </div>}
+      {booking.history?.length > 0 && <section><h3>{t("requestHistory")}</h3><ol>{booking.history.map((entry, index) => <li key={index}><strong>{t(`status_${entry.status}`, { defaultValue: entry.status })}</strong> · {t(`actor_${entry.actor}`, { defaultValue: entry.actor })} · <time>{new Date(entry.createdAt).toLocaleString()}</time>{entry.comment && <p>{entry.comment}</p>}</li>)}</ol></section>}
     </section>
   </div>;
 }
@@ -3571,7 +3610,7 @@ function SupplierModal({ supplier, countryOptions, saved, canContact, onSave, on
 function BookingModal({ supplier, serviceOffering, options = [], onClose, onSubmit }) {
   const { t, i18n } = useTranslation();
   const [date, setDate] = useState("");
-  const [guests, setGuests] = useState("");
+  const [quantity, setQuantity] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedOptionId, setSelectedOptionId] = useState(serviceOffering?.id || options[0]?.id || "");
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -3614,7 +3653,7 @@ function BookingModal({ supplier, serviceOffering, options = [], onClose, onSubm
   function submit(event) {
     event.preventDefault();
     if (!date) return;
-    onSubmit({ eventDate: date, guests, notes, serviceOfferingId: selectedOffering?.id });
+    onSubmit({ eventDate: date, quantity: quantity ? Number(quantity) : null, notes, serviceOfferingId: selectedOffering?.id });
   }
   const locale = i18n.language === "el" ? "el-GR" : i18n.language === "fr" ? "fr-FR" : i18n.language === "ar" ? "ar" : "en-US";
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="booking-modal" role="dialog" aria-modal="true" aria-label={t("requestBooking")}><button className="modal-close" onClick={onClose} aria-label={t("closeDialog")}><X size={19} /></button><div className="booking-modal-icon"><CalendarDays size={21} /></div><div className="eyebrow">{t("bookingEyebrow")}</div><h2>{t("askAboutDate")}</h2><p>{t("bookingIntro", { name: supplier.name })}</p>
@@ -3622,6 +3661,7 @@ function BookingModal({ supplier, serviceOffering, options = [], onClose, onSubm
       {options.length > 0 && <label>{t("chooseService")}<select value={selectedOptionId}
         onChange={(event) => {
           setSelectedOptionId(event.target.value);
+          setQuantity("");
           setDate("");
           setAvailabilityDates([]);
         }} required>
@@ -3629,6 +3669,7 @@ function BookingModal({ supplier, serviceOffering, options = [], onClose, onSubm
         {options.map((option) => <option value={option.id} key={option.id}>{option.name}</option>)}
       </select></label>}
       {selectedOffering && <p className="selected-option-label">{t("selectedService")}: <strong>{selectedOffering.name}</strong></p>}
+      {selectedOffering && <p>{t("servicePrice")}: {selectedOffering.price == null ? "—" : `${selectedOffering.price} ${supplier.currency || ""}`} {pricingTypeLabels[selectedOffering.pricingType] ? `· ${t(pricingTypeLabels[selectedOffering.pricingType])}` : ""}</p>}
       {selectedOffering ? <section className="availability-calendar" aria-label={t("serviceAvailabilityCalendar")}>
         <div className="availability-calendar-heading">
           <button type="button" className="booking-action" aria-label={t("previousMonth")} disabled={calendarMonth.getFullYear() === new Date().getFullYear() && calendarMonth.getMonth() <= new Date().getMonth()} onClick={() => { setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1)); setDate(""); }}>‹</button>
@@ -3654,8 +3695,8 @@ function BookingModal({ supplier, serviceOffering, options = [], onClose, onSubm
         <small>{t("unavailable")}: {t("unavailableDatesHint")}</small>
         {!date && <span className="calendar-date-required">{t("chooseAvailableDate")}</span>}
       </section> : <label>{t("weddingDate")}<input type="date" lang={i18n.language} value={date} onChange={(event) => setDate(event.target.value)} required min={today} /></label>}
-      <label>{t("guestCount")} <span className="optional">({t("optional")})</span><input type="number" placeholder={t("guestCountPlaceholder")} min="1" value={guests} onChange={(event) => setGuests(event.target.value)} /></label>
-      <label>{t("noteToSupplier", { name: supplier.name })} <span className="optional">({t("optional")})</span><textarea rows="3" placeholder={t("bookingNotePlaceholder")} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
+      <label>{t("requestQuantity")}<input type="number" min={selectedOffering?.minimumAmount || 1} max={selectedOffering?.maximumAmount} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} required /></label>
+      <label>{t("noteToSupplier", { name: supplier.name })} <span className="optional">({t("optional")})</span><textarea rows="3" maxLength={2000} placeholder={t("bookingNotePlaceholder")} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
       <div className="booking-note"><ShieldCheck size={15} /> {t("enquiryNoPayment")}</div><button className="primary-button submit-booking" type="submit" disabled={!date || (selectedOffering && availabilityLoading)}>{t("sendBookingRequest")} <ArrowRight size={15} /></button>
     </form></section></div>;
 }
@@ -3895,7 +3936,7 @@ function StripePaymentForm({ onPaid }) {
 function QuoteModal({ booking, onClose, onSubmit }) {
   const { t } = useTranslation();
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(booking.currency || "USD");
   function submit(event) {
     event.preventDefault();
     const amountCents = Math.round(Number(amount) * 100);

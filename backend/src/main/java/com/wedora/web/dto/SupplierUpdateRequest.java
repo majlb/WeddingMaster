@@ -25,5 +25,6 @@ public record SupplierUpdateRequest(
         @Valid Map<String, SupplierLocalizedContent> localizedContent,
         List<@Size(min = 2, max = 2) String> countryCodes,
         Double latitude,
-        Double longitude
+        Double longitude,
+        @Size(max = 100) String timeZone
 ) {}

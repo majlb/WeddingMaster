@@ -41,6 +41,8 @@ public class Supplier {
     private String slug;
     @Column(nullable = false, length = 180)
     private String location;
+    @Column(length = 100)
+    private String timeZone;
     @Column(name = "latitude")
     private Double latitude;
     @Column(name = "longitude")

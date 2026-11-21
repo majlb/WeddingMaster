@@ -85,6 +85,12 @@ public class SupplierService {
         Supplier supplier = suppliers.findById(id)
                 .orElseThrow(() -> new ApiException.NotFound("Supplier not found"));
         ensureOwner(supplier, email);
+        if (request.timeZone() != null) {
+            if (!java.time.ZoneId.getAvailableZoneIds().contains(request.timeZone())) {
+                throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Invalid IANA time zone");
+            }
+            supplier.setTimeZone(request.timeZone());
+        }
         if (request.countryCodes() != null) supplier.setCountryCodes(CountryCodes.normalize(request.countryCodes()));
         if ((request.latitude() == null) != (request.longitude() == null)) {
             throw new ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "Latitude and longitude must be provided together");
