@@ -34,6 +34,11 @@ function localDateString(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function BrandContent() {
+  return <><span className="brand-mark"><img src="/favicon.png" alt="" /></span>
+    <span><span className="brand-period">.</span>wedMasterAI</span></>;
+}
+
 function daysUntilDate(dateString) {
   const [year, month, day] = dateString.split("-").map(Number);
   const today = new Date();
@@ -986,8 +991,7 @@ function App() {
       data-palette={palette} data-typography={typography} data-density={density}>
       {!isPublicLanding && account && <aside className={`sidebar${mobileNav ? " mobile-open" : ""}`}>
         <button className="brand" onClick={() => setActivePage("home")} aria-label={t("wedoraHome")}>
-          <span className="brand-mark"><Flower2 size={22} strokeWidth={1.7} /></span>
-          <span>wedmaster<span className="brand-period">.</span></span>
+          <BrandContent />
         </button>
         <div className="sidebar-label">{t("yourWorkspace").toUpperCase()}</div>
         <div className="wedding-switcher account-switcher">
@@ -1017,8 +1021,7 @@ function App() {
       <main className={`main-content${isPublicLanding ? " public-main" : ""}`}>
         {isPublicLanding ? <header className="public-header">
           <button className="brand" onClick={() => navigate("/")} aria-label={t("wedoraHome")}>
-            <span className="brand-mark"><Flower2 size={22} strokeWidth={1.7} /></span>
-            <span>wedmaster<span className="brand-period">.</span></span>
+            <BrandContent />
           </button>
           <nav className="public-nav" aria-label={t("mainNavigation")}>
             <button onClick={() => setActivePage("discover")}>{t("landingExploreNav")}</button>
@@ -1350,8 +1353,8 @@ function PublicLanding({ t, account, categories, suppliers, saved, onExplore, on
     </section>
 
     <footer className="public-footer">
-      <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-        <span className="brand-mark"><Flower2 size={20} strokeWidth={1.7} /></span><span>wedmaster<span className="brand-period">.</span></span>
+      <button className="brand" aria-label={t("wedoraHome")} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+        <BrandContent />
       </button>
       <p>{t("landingFooter")}</p>
       <button className="public-footer-login" onClick={account ? onExplore : onSignIn}>{account ? t("landingFooterExplore") : t("landingSignIn")} <ArrowRight size={14} /></button>
