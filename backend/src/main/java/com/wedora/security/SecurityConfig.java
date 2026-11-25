@@ -72,6 +72,7 @@ public class SecurityConfig {
                                                     Environment environment) {
         CorsConfiguration configuration = new CorsConfiguration();
         List<String> allowedOrigins = new ArrayList<>(List.of(frontendUrl));
+        allowedOrigins.add("https://localhost");
         if (environment.matchesProfiles("!prod")) {
             allowedOrigins.add("http://localhost:5173");
             allowedOrigins.add("http://127.0.0.1:5173");

@@ -76,7 +76,7 @@ const translations = {
       landingStepExplore: "Explore", landingStepExploreDetail: "Browse wedding services and meet professionals whose work matches your vision.",
       landingStepConnect: "Connect", landingStepConnectDetail: "Save the people you love and send booking enquiries when you are ready.",
       landingStepPlan: "Bring it together", landingStepPlanDetail: "Keep your planning, conversations and next steps organised in your workspace.",
-      landingFooter: "Thoughtful tools for the moments you’ll remember.", landingFooterExplore: "Explore the marketplace",
+      landingFooter: "Thoughtful tools for the moments you’ll remember.", landingFooterExplore: "Explore the marketplace", privacyPolicy: "Privacy policy",
       
       guests: "Guest list",
       guestsIntro: "Manage and organize your guest list",
@@ -229,7 +229,7 @@ const translations = {
       landingStepExplore: "Explorez", landingStepExploreDetail: "Parcourez les services et rencontrez des professionnels qui partagent votre vision.",
       landingStepConnect: "Échangez", landingStepConnectDetail: "Enregistrez vos coups de cœur et envoyez une demande lorsque vous êtes prêt.",
       landingStepPlan: "Tout organiser", landingStepPlanDetail: "Retrouvez votre organisation, vos échanges et vos prochaines étapes au même endroit.",
-      landingFooter: "Des outils attentionnés pour les moments inoubliables.", landingFooterExplore: "Explorer la marketplace",
+      landingFooter: "Des outils attentionnés pour les moments inoubliables.", landingFooterExplore: "Explorer la marketplace", privacyPolicy: "Politique de confidentialité",
       
       guests: "Liste des invités",
       guestsIntro: "Gérez et organisez votre liste d'invités",
@@ -382,7 +382,7 @@ const translations = {
       landingStepExplore: "Εξερευνήστε", landingStepExploreDetail: "Αναζητήστε υπηρεσίες γάμου και γνωρίστε επαγγελματίες που ταιριάζουν στο όραμά σας.",
       landingStepConnect: "Επικοινωνήστε", landingStepConnectDetail: "Αποθηκεύστε τις επιλογές σας και στείλτε αίτημα όταν είστε έτοιμοι.",
       landingStepPlan: "Οργανώστε τα πάντα", landingStepPlanDetail: "Κρατήστε τον προγραμματισμό, τις συνομιλίες και τα επόμενα βήματα μαζί.",
-      landingFooter: "Προσεγμένα εργαλεία για στιγμές που θα θυμάστε.", landingFooterExplore: "Εξερευνήστε την αγορά",
+      landingFooter: "Προσεγμένα εργαλεία για στιγμές που θα θυμάστε.", landingFooterExplore: "Εξερευνήστε την αγορά", privacyPolicy: "Πολιτική απορρήτου",
       
       guests: "Λίστα καλεσμένων",
       guestsIntro: "Διαχείριση και οργάνωση της λίστας καλεσμένων",
@@ -535,7 +535,7 @@ const translations = {
       landingStepExplore: "اكتشفوا", landingStepExploreDetail: "تصفحوا خدمات الزفاف وتعرّفوا على محترفين يشاركونكم رؤيتكم.",
       landingStepConnect: "تواصلوا", landingStepConnectDetail: "احفظوا خياراتكم المفضلة وأرسلوا طلبات الحجز عندما تكونون مستعدين.",
       landingStepPlan: "نظّموا التفاصيل", landingStepPlanDetail: "اجمعوا التخطيط والمحادثات والخطوات القادمة في مساحة واحدة.",
-      landingFooter: "أدوات مدروسة للحظات ستبقى في الذاكرة.", landingFooterExplore: "استكشفوا المنصة",
+      landingFooter: "أدوات مدروسة للحظات ستبقى في الذاكرة.", landingFooterExplore: "استكشفوا المنصة", privacyPolicy: "سياسة الخصوصية",
       
       guests: "قائمة الضيوف",
       guestsIntro: "إدارة وتنظيم قائمة الضيوف الخاصة بك",

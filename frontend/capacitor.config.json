@@ -1,0 +1,8 @@
+{
+  "appId": "com.wedmasterai.app",
+  "appName": "wedMasterAI",
+  "webDir": "mobile-dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

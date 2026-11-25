@@ -6,6 +6,8 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
     envVars:
+      - key: NODE_VERSION
+        value: 22.22.1
       - key: VITE_API_URL
         value: https://weddingmaster.onrender.com/api
       - key: VITE_WS_URL

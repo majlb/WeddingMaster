@@ -12,11 +12,13 @@ Wedmaster is a wedding-planning platform starter with a React/Vite client and a 
 - **API reference:** OpenAPI/Swagger UI at `/swagger-ui/index.html` while the API is running.
 - **Deployment:** Docker Compose, production Spring profile, health endpoint, and GitHub Actions CI.
 
-Supplier categories are database records, not a closed enum. Venues, catering, flowers, dresses, hair, makeup, and photography are added at startup; admins can add or archive categories through the API.
+Supplier categories are database records, not a closed enum. The default wedding categories, including attire, beauty, entertainment, decoration, travel and event services, are added when missing at startup; existing categories and archived states are preserved. Admins can add or archive categories through the API.
+
+The public privacy policy is available at `/privacy-policy`, including a contact for account and data deletion requests. Review the policy against the deployed services, actual retention practices, and applicable requirements before publishing or submitting it to Google Play.
 
 ## Run locally
 
-Requirements: Java 17, Maven 3.9+, Node.js 20+, and npm.
+Requirements: Java 17, Maven 3.9+, Node.js 22+, and npm.
 
 1. Start the API:
 
@@ -27,7 +29,7 @@ Requirements: Java 17, Maven 3.9+, Node.js 20+, and npm.
 
    The API uses an in-memory H2 database by default at `http://localhost:8080`. Initial categories are seeded automatically. Set `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD` to use PostgreSQL instead.
 
-   When running the Vite development server at `http://localhost:5173`, the non-production API profile allows that local origin for CORS. Production continues to allow only the configured `FRONTEND_URL`.
+   When running the Vite development server at `http://localhost:5173`, the non-production API profile allows that local origin for CORS. Production allows configured web origins and the Android app's `https://localhost` origin.
    Vite proxies WebSocket chat connections through `/ws`; keep the frontend and API on their documented local ports when using the default configuration.
 
 2. In another terminal, start the frontend:
@@ -59,6 +61,31 @@ Requirements: Java 17, Maven 3.9+, Node.js 20+, and npm.
    The backend defaults to OpenRouter. Set `AI_PROVIDER=openrouter` and inject `OPENROUTER_API_KEY` as a backend process/deployment secret. Do not put the key in frontend `VITE_` variables, `.env`, or source control. The default model is `openai/gpt-4o-mini`; override it with `OPENROUTER_MODEL` if needed. `OPENROUTER_BASE_URL` and `OPENROUTER_TIMEOUT_SECONDS` are also configurable. Recent chat messages and up to 25 approved public supplier summaries are sent to the configured provider; Wedmaster does not persist assistant conversations. OpenRouter is an external service and may process data according to its own policies.
 
    For Render, add `AI_PROVIDER`, `OPENROUTER_API_KEY`, and optionally `OPENROUTER_MODEL` in the **backend web service** environment, then redeploy. `render.yaml` configures only the frontend, and Docker Compose settings do not automatically apply to a separate Render service. Use an OpenRouter key, not an OpenAI key. If chat returns 503, inspect the backend log for `Configured assistant model request failed`; a provider HTTP status of 401/403 indicates credentials or access, 402 indicates credits, and 429 indicates rate limiting. The logged status is the provider's status, not the application's generic 503. Check the key, OpenRouter balance, model access, or provider availability as appropriate. Never share keys or chat contents in logs or support requests.
+
+## Android app
+
+The Capacitor Android project packages the existing frontend and uses the same accounts and API. Its application ID is `com.wedmasterai.app`, display name is `wedMasterAI`, minimum Android version is 7 (API 24), and target is API 36. The ID must not be changed after publishing.
+
+Install Node.js 22+, Android Studio Otter 2025.2.1 or later, JDK 21, and Android SDK Platform 36 and build tools through Android Studio. Set `JAVA_HOME` to JDK 21 (Android Studio's bundled JDK can be used) and configure the SDK in Android Studio or `ANDROID_HOME`.
+
+From `frontend`, install dependencies and build/sync before every Android build:
+
+```powershell
+npm ci
+# Optional: set these before building to override the production defaults.
+$env:VITE_API_URL = "https://weddingmaster.onrender.com/api"
+$env:VITE_STRIPE_PUBLISHABLE_KEY = "<your Stripe publishable key>"
+npm run android:sync
+npm run android:open
+```
+
+Only public frontend configuration belongs in `VITE_` variables; never include Stripe secret keys, AI keys, signing passwords, or other credentials. The app defaults to the Render API above when `VITE_API_URL` is unset. Use an absolute HTTPS API URL ending in `/api`; a phone cannot reach the development proxy at its own localhost. In Android the WebSocket defaults to `wss://<API host>/ws`; `VITE_WS_URL` overrides it if the deployment uses a different endpoint. Redeploy the backend changes to allow the app's `https://localhost` origin for both API requests and WebSockets before testing.
+
+In Android Studio, select an emulator or device and run the app. A debug APK can also be generated from `frontend\android` with `.\gradlew.bat assembleDebug`; it appears under `app\build\outputs\apk\debug`. The debug APK is for testing, not Google Play.
+
+For Google Play, use **Build > Generate Signed Bundle / APK > Android App Bundle** in Android Studio with the owner's upload key and Play App Signing. Keep the keystore and passwords outside the repository and back them up securely. The resulting signed `.aab` is uploaded in Play Console; increase `versionCode` in `frontend\android\app\build.gradle` for each upload. Complete the store listing, privacy policy, data-safety declarations, account requirements, and Play review, and recheck Google's current target API requirements before release.
+
+This project does **not** implement background Android push notifications: chat and notifications require an active in-app WebSocket connection. The app currently retains its login token in WebView local storage (Android backup is disabled). Before publishing, test registration, login, navigation/back button, external links, uploads, downloads, chat, supplier images, and Stripe payments on actual devices. In particular, the existing web Stripe Elements checkout and redirect/3-D Secure flows have not been validated in an Android WebView; do not assume payment is production-ready without end-to-end testing and any necessary native payment integration. The app requires network access and a deployed backend.
 
 ## Authentication and authorization
 

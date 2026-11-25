@@ -13,7 +13,7 @@ import {
   notificationsApi, supplierServicesApi, usersApi,
   paymentsApi, resolveMediaUrl, reviewsApi, suppliersApi, websocketUrl,
 } from "./api.js";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { Client } from "@stomp/stompjs";
@@ -1014,6 +1014,7 @@ function App() {
         </div>}
         <div className="sidebar-bottom">
           <div className="profile-row account-profile"><div className="profile-avatar">{account?.name?.slice(0, 1)?.toUpperCase() || "W"}</div><div><strong>{account?.name || account?.email}</strong><small>{roleLabel}</small></div></div>
+          <Link className="privacy-sidebar-link" to="/privacy-policy">{t("privacyPolicy")}</Link>
           <button className="logout-button sidebar-logout" onClick={signOut}><LogOut size={16} /><span>{t("signOut")}</span></button>
         </div>
       </aside>}
@@ -1357,6 +1358,7 @@ function PublicLanding({ t, account, categories, suppliers, saved, onExplore, on
         <BrandContent />
       </button>
       <p>{t("landingFooter")}</p>
+      <Link className="public-footer-login" to="/privacy-policy">{t("privacyPolicy")}</Link>
       <button className="public-footer-login" onClick={account ? onExplore : onSignIn}>{account ? t("landingFooterExplore") : t("landingSignIn")} <ArrowRight size={14} /></button>
     </footer>
   </div>;

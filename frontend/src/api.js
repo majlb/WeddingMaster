@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Capacitor } from "@capacitor/core";
 
 const apiBaseUrl = "https://weddingmaster.onrender.com/api";/*import.meta.env.VITE_API_URL
   || (import.meta.env.PROD ? "https://weddingmaster.onrender.com/api" : "/api");
@@ -15,8 +16,20 @@ export function resolveMediaUrl(url) {
   const apiBase = new URL(apiBaseUrl, window.location.origin);
   return new URL(url, apiBase).toString();
 }
+export function defaultWebsocketUrl(apiUrl, location, isNative) {
+  if (isNative) {
+    const url = new URL(apiUrl, location.origin);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = "/ws";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  }
+  return `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`;
+}
+
 export const websocketUrl = import.meta.env.VITE_WS_URL
-  || `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
+  || defaultWebsocketUrl(apiBaseUrl, window.location, Capacitor.isNativePlatform());
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("wedora-token");

@@ -42,6 +42,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         List<String> allowedOrigins = new java.util.ArrayList<>(List.of(frontendUrl));
+        allowedOrigins.add("https://localhost");
         if (environment.matchesProfiles("!prod")) {
             allowedOrigins.add("http://localhost:5173");
             allowedOrigins.add("http://127.0.0.1:5173");

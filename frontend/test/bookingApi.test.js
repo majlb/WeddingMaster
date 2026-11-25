@@ -5,6 +5,7 @@ import { createServer } from "vite";
 let server;
 let api;
 let bookingsApi;
+let defaultWebsocketUrl;
 let previousWindow;
 let previousStorage;
 
@@ -14,7 +15,19 @@ before(async () => {
   globalThis.window = { location: { protocol: "http:", host: "localhost:5173" } };
   globalThis.localStorage = { getItem: () => null };
   server = await createServer({ configFile: false, server: { middlewareMode: true }, appType: "custom" });
-  ({ api, bookingsApi } = await server.ssrLoadModule("/src/api.js"));
+  ({ api, bookingsApi, defaultWebsocketUrl } = await server.ssrLoadModule("/src/api.js"));
+});
+
+test("native websocket uses the backend while web keeps the current origin", () => {
+  const nativeLocation = { origin: "https://localhost", protocol: "https:", host: "localhost" };
+  assert.equal(defaultWebsocketUrl("https://weddingmaster.onrender.com/api", nativeLocation, true),
+    "wss://weddingmaster.onrender.com/ws");
+  assert.equal(defaultWebsocketUrl("https://example.com:8443/api?test=1", nativeLocation, true),
+    "wss://example.com:8443/ws");
+  assert.equal(defaultWebsocketUrl("https://example.com/api", nativeLocation, false),
+    "wss://localhost/ws");
+  assert.equal(defaultWebsocketUrl("/api", { protocol: "http:", host: "localhost:5173" }, false),
+    "ws://localhost:5173/ws");
 });
 
 after(async () => {
